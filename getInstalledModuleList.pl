@@ -8,51 +8,51 @@ use Moose;
 use File::Find ();
 use Module::Metadata;
 use DateTime;
-use English;
+use English qw(-no_match_vars); # Avoids regex perf penalty, perl < v5.016000
 
 #-------------------------------------------------------------------------------
 # Names of modules found via File::Find and @INC
 #
 has moduleNames =>
-    ( is		=> 'rw'
-    , isa		=> 'HashRef'
-    , traits		=> ['Hash']
-    , default		=> sub { return {}; }
-    , handles		=>
-      { addModule	=> 'set'
-      , getModule	=> 'get'
-      , getModuleNames	=> 'keys'
-      , existModule	=> 'defined'
+    ( is                => 'rw'
+    , isa               => 'HashRef'
+    , traits            => ['Hash']
+    , default           => sub { return {}; }
+    , handles           =>
+      { addModule       => 'set'
+      , getModule       => 'get'
+      , getModuleNames  => 'keys'
+      , existModule     => 'defined'
       }
     );
 
 # Modules which are processed
 #
 has processedModules =>
-    ( is		=> 'rw'
-    , isa		=> 'HashRef'
-    , traits		=> ['Hash']
-    , default		=> sub { return {}; }
-    , handles		=>
-      { addPModule	=> 'set'
-      , existPModule	=> 'defined'
+    ( is                => 'rw'
+    , isa               => 'HashRef'
+    , traits            => ['Hash']
+    , default           => sub { return {}; }
+    , handles           =>
+      { addPModule      => 'set'
+      , existPModule    => 'defined'
       }
     );
 
 # Aid for printing
 #
 has maxModNameLength =>
-    ( is		=> 'rw'
-    , isa		=> 'Int'
-    , default		=> 0
+    ( is                => 'rw'
+    , isa               => 'Int'
+    , default           => 0
     );
 
 # Aid for printing
 #
 #has maxPathLength =>
-#    ( is		=> 'rw'
-#    , isa		=> 'Int'
-#    , default		=> 0
+#    ( is               => 'rw'
+#    , isa              => 'Int'
+#    , default          => 0
 #    );
 
 #-------------------------------------------------------------------------------
@@ -93,8 +93,8 @@ for( my $i = 0; $i <= $#INC; $i++)
 say $ML "";
 say $ML ' ' x 11, " +- Module has manual";
 say $ML sprintf( "%-11.11s %s %-4s %-${mxl}.${mxl}s"
-  	       , 'Version', 'V', 'INC', 'Module name', 'Purpose'
-	       );
+               , 'Version', 'V', 'INC', 'Module name', 'Purpose'
+               );
 say $ML '-' x 11, ' -', ' ', '-' x 4, ' ', '-' x $mxl, ' ', '-' x 100;
 my $cmpare = sub {lc($a) cmp lc($b);};
 foreach my $pk (sort $cmpare $self->getModuleNames)
@@ -102,9 +102,9 @@ foreach my $pk (sort $cmpare $self->getModuleNames)
   my $m = $self->getModule($pk);
 
   say $ML sprintf( "%-11.11s %s %4s %-${mxl}.${mxl}s %s"
-  		 , $m->{version}, $m->{manual}
-		 , $m->{path}, $pk, $m->{purpose}
-		 );
+                 , $m->{version}, $m->{manual}
+                 , $m->{path}, $pk, $m->{purpose}
+                 );
 }
 
 close $ML;
@@ -162,11 +162,11 @@ sub processInfo
   # Initialize default info
   #
   my $m = { manual => '-'
-  	  , version => ''
-	  , provides => []
-	  , purpose => ''
-	  , path => ''
-	  };
+          , version => ''
+          , provides => []
+          , purpose => ''
+          , path => ''
+          };
 
   # Return if found before
   #
@@ -186,7 +186,7 @@ sub processInfo
   #
   $m->{version} = $meta->version ? $meta->version : '';
   $m->{manual} = $meta->contains_pod ? 'M' : ' ';
-  
+
   # Get path to module, replace INC search path with a number to make it shorter
   #
   my $path = $meta->filename;
@@ -229,13 +229,13 @@ sub processInfo
     # checked at the beginning of the function.
     #
     $self->addPModule( $pkpm => 1);
-    
+
     # Process module and add info
     #
     my $mPkpm = $self->processInfo($pkpm);
     $self->addModule( $pkpm => $mPkpm) if defined $mPkpm;
   }
-  
+
   $m->{infoProcessed} = 1;
   return $m;
 }

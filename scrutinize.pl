@@ -18,107 +18,107 @@ $columns = 80;
 #-------------------------------------------------------------------------------
 #
 has description =>
-    ( is		=> 'ro'
-    , isa		=> 'Str'
-    , default		=> <<EODSCR
+    ( is                => 'ro'
+    , isa               => 'Str'
+    , default           => <<EODSCR
 Program to test a distribution and or get metrics or critics using controlling
 information from 'Project.yml' in the current directory. The results of the
 tests is stored in a configuration directory 'Distribution-Tests' also in the
 current directory. The default will be gathering critics about a module.
 EODSCR
-    , init_arg		=> undef
-    , lazy		=> 1
+    , init_arg          => undef
+    , lazy              => 1
     );
 
 has usage =>
-    ( is		=> 'ro'
-    , isa		=> 'ArrayRef'
-    , default		=> 
+    ( is                => 'ro'
+    , isa               => 'ArrayRef'
+    , default           =>
       sub
       { return
-	[ "$0 --prove -lbvq <module>            Test modules using App::Prove"
-	, "$0 --prove -s <module>               Show prove test results"
-	, "$0 --critic <severity> <module>      Test modules using Perl::Critic"
-	, "$0 --critic <severity> -ds <module>  Show gathered critics"
-	];
+        [ "$0 --prove -lbvq <module>            Test modules using App::Prove"
+        , "$0 --prove -s <module>               Show prove test results"
+        , "$0 --critic <severity> <module>      Test modules using Perl::Critic"
+        , "$0 --critic <severity> -ds <module>  Show gathered critics"
+        ];
       }
-    , init_arg		=> undef
-    , lazy		=> 1
+    , init_arg          => undef
+    , lazy              => 1
     );
 
 has arguments =>
-    ( is		=> 'ro'
-    , isa		=> 'ArrayRef'
-    , default		=> 
+    ( is                => 'ro'
+    , isa               => 'ArrayRef'
+    , default           =>
       sub
       { return
-	[ [ 'test-selection'	=> <<EODSCR
+        [ [ 'test-selection'    => <<EODSCR
 One or more words which are used to select the tests from 'Project.yml'. When
 no words are given, all tests are executed.
 EODSCR
-	  ]
-	]
+          ]
+        ]
       }
-    , init_arg		=> undef
-    , lazy		=> 1
+    , init_arg          => undef
+    , lazy              => 1
     );
 
 has options =>
-    ( is		=> 'ro'
-    , isa		=> 'ArrayRef'
-    , default		=> 
+    ( is                => 'ro'
+    , isa               => 'ArrayRef'
+    , default           =>
       sub
       { return
-	[ [ 'blib|b'	=> 'Use library path ./blib, default off.']
-	, [ 'critic:s'	=> <<EOTXT
+        [ [ 'blib|b'    => 'Use library path ./blib, default off.']
+        , [ 'critic:s'  => <<EOTXT
 Test programs using critic. Level of critic is given
 by a number from 1 to 5 meaning brutal, cruel, harsh, stern or gentle. Default
 is 1 or brutal.
 EOTXT
           ]
-	, [ 'describe|d=s@' => <<EOTXT
+        , [ 'describe|d=s@' => <<EOTXT
 Describe selected critic numbers more fully. This option is used with --critic
 and --show to show the gathered critisizm upon a module. The critics are
-numbered in the first column of the list. When this option is used with the 
+numbered in the first column of the list. When this option is used with the
 selected numbers, more information is shown.
 EOTXT
-	  ]
-	, [ 'help|h'	=> 'Help on this program']
-	, [ 'lib|l'	=> 'Use library path ./lib, default off']
+          ]
+        , [ 'help|h'    => 'Help on this program']
+        , [ 'lib|l'     => 'Use library path ./lib, default off']
         , [ 'metric|m'  => <<EOTXT
 Get metrics about modules. Some of the metrics are gathered by other options
 like --critic
 EOTXT
           ]
-	, [ 'prove'	=> 'Test programs using App::prove']
-	, [ 'quiet|q'	=> 'Hide test information, default off']
-	, [ 'show|s'	=> <<EOTXT
+        , [ 'prove'     => 'Test programs using App::prove']
+        , [ 'quiet|q'   => 'Hide test information, default off']
+        , [ 'show|s'    => <<EOTXT
 Show results. Use this option in combination with --critic, --metric or --prove.
 Tests are not done when this option is used.
 EOTXT
-	  ]
-	, [ 'verbose|v!'=> 'Show all tests done by prove, default on']
-	]
+          ]
+        , [ 'verbose|v!'=> 'Show all tests done by prove, default on']
+        ]
       }
-    , init_arg		=> undef
-    , lazy		=> 1
+    , init_arg          => undef
+    , lazy              => 1
     );
 
 has examples =>
-    ( is		=> 'ro'
-    , isa		=> 'ArrayRef'
-    , default		=> 
+    ( is                => 'ro'
+    , isa               => 'ArrayRef'
+    , default           =>
       sub
       { return
-	[ [ "$0 --critic=gentle" => <<EOTXT
+        [ [ "$0 --critic=gentle" => <<EOTXT
 Run Perl::Critic on modules defined in Project.yml. The severity level is
 set to 5 which means 'gentle'.
 EOTXT
           ]
-	];
+        ];
       }
-    , init_arg		=> undef
-    , lazy		=> 1
+    , init_arg          => undef
+    , lazy              => 1
     );
 
 has _cnvSeverityHash =>
@@ -141,7 +141,7 @@ has _cnvSeverityHash =>
       { cnvSeverityCode => 'get'
       }
     );
-    
+
 has _program_tested =>
     ( is                => 'ro'
     , isa               => 'HashRef'
@@ -204,11 +204,11 @@ $log->log_mask($self->M_ERROR|$self->M_WARNING|$self->M_INFO);
   my $cfm = $app->get_app_object('ConfigManager');
   $cfm->initialize;
   $cfm->add_config_object( 'Matrix'
-  		       , { store_type	=> 'Yaml'
-			 , location	=> $cfm->C_CFF_WORKDIR
-			 , requestFile	=> 'Matrix'
-			 }
-		       );
+                       , { store_type   => 'Yaml'
+                         , location     => $cfm->C_CFF_WORKDIR
+                         , requestFile  => 'Matrix'
+                         }
+                       );
   $cfm->load;
   $cfm->set_documents([]) unless $cfm->nbr_documents;
 #  $cfm->set_value( "Matrix", {}) unless $cfm->get_value("Matrix");
@@ -216,11 +216,11 @@ $log->log_mask($self->M_ERROR|$self->M_WARNING|$self->M_INFO);
   $log->show_on_warning(1);
 
   $cfm->add_config_object( 'Project'
-  		       , { store_type	=> 'Yaml'
-			 , location	=> $cfm->C_CFF_FILEPATH
-			 , requestFile	=> 'Project'
-			 }
-		       );
+                       , { store_type   => 'Yaml'
+                         , location     => $cfm->C_CFF_FILEPATH
+                         , requestFile  => 'Project'
+                         }
+                       );
 
   my $sts = $self->loadProjectConfig( $log, $cfm);
   $self->leave unless $sts;
@@ -249,8 +249,8 @@ $cmd->setOption( blib => 0, lib => 0, verbose => 1);
 # Initialize
 #
 $cmd->initialize( $self->description, $self->arguments, $self->options
-		, $self->usage, $self->examples
-		);
+                , $self->usage, $self->examples
+                );
 #say (join ', ', map {"$_=" . $cmd->getOption($_)} sort $cmd->get_options);
 
 # Noverbose or quiet will make proving less noisy
@@ -318,19 +318,7 @@ elsif( $cmd->getOption('critic') )
   $self->saveCriticResults($results);
 }
 
-
-
 $self->leave;
-
-#-------------------------------------------------------------------------------
-# Cleanup and leave
-#
-sub leave
-{
-  my $app = AppState->instance;
-  $app->cleanup;
-  exit(0);
-}
 
 #-------------------------------------------------------------------------------
 #
@@ -349,8 +337,8 @@ sub loadProjectConfig
       $f =~ s@.*?([^/]+)$@$1@;
 
       $log->write( "Problems reading project file $f, abort ..."
-    		 , $self->C_PROJECTREADERR
-		 );
+                 , $self->C_PROJECTREADERR
+                 );
     }
 
     else
@@ -401,18 +389,18 @@ sub testDistribution
           next;
         }
 
-	say "   program $testProgram" unless $cmd->getOption('quiet');
-	push @tPrgs, $testProgram;
+        say "   program $testProgram" unless $cmd->getOption('quiet');
+        push @tPrgs, $testProgram;
         my $state = $self->prove($testProgram);
         $self->set_tested_program( $testProgram => $state);
-#	push @states, $state;
+#       push @states, $state;
       }
 
       else
       {
         $self->_log( "Test program $testProgram not found"
-	           , $self->C_TESTFILENTFND
-		   );
+                   , $self->C_TESTFILENTFND
+                   );
       }
     }
 
@@ -479,11 +467,11 @@ sub saveTestResults
     {
 #say "Matrix/$module/$OSNAME/Perl/$runPerlVersion = $result->[1][$i]";
       $cfm->set_kvalue( "Matrix/$module/$OSNAME/Perl/$runPerlVersion"
-		     , $result->[1][$i]
-		     , $self->get_tested_program($result->[1][$i])
+                     , $result->[1][$i]
+                     , $self->get_tested_program($result->[1][$i])
                        ? 'Ok'
                        : 'Failed'
-		     );
+                     );
     }
   }
 
@@ -502,10 +490,10 @@ sub setPrimeModuleInfo
 
   my $version = $self->getModuleVersion($module_name);
   my $minPerlVersion = 'v'
-    		     . join( '.', @{$self->getPerlMinimalVersion($module_name)
-		                         ->{version}
-				   }
-			   );
+                     . join( '.', @{$self->getPerlMinimalVersion($module_name)
+                                         ->{version}
+                                   }
+                           );
   my $runPerlVersion = 'v' . join( '.', @{$PERL_VERSION->{version}});
 
   $cfm->set_value( "Matrix/$module_name/ModuleVersion", $version);
@@ -583,7 +571,7 @@ sub metricsOfDistribution
     $code = 'use lib qw(lib);' if $cmd->optionExists('lib');
     $code = "require $moduleName;";
     eval($code);
-    
+
     my $newObj = $moduleName->$constructor;
     if( $newObj->can('meta') )
     {
@@ -724,16 +712,16 @@ sub saveCriticResults
     foreach my $v (@violations)
     {
       $vstore = { description => $v->description
-      		, explanation => $v->explanation
-		, line_number => $v->logical_line_number
+                , explanation => $v->explanation
+                , line_number => $v->logical_line_number
                 , colomn_number => $v->visual_column_number
-		, filename => $v->filename
-		, severity => $v->severity
-		, diagnostics => $v->diagnostics
-		, policy => $v->policy
-		, source => $v->source
-		, element_class => $v->element_class
-		};
+                , filename => $v->filename
+                , severity => $v->severity
+                , diagnostics => $v->diagnostics
+                , policy => $v->policy
+                , source => $v->source
+                , element_class => $v->element_class
+                };
       $cfm->push_value( "Matrix/$module/Critics", [$vstore]);
     }
 
@@ -783,11 +771,11 @@ sub showProveInfo
   $cfm->select_document(0);
 
   say sprintf( "\n%-45s %-8s %-9s %-25s %-6s"
-      	     , 'Module', 'Version', 'Use Perl', 'Test Program', 'Result'
+             , 'Module', 'Version', 'Use Perl', 'Test Program', 'Result'
              );
   say sprintf( "%45s %8s %9s %25s %6s"
-      	     , '-' x 45, '-' x 8, '-' x 9, '-' x 25, '-' x 6
-	     );
+             , '-' x 45, '-' x 8, '-' x 9, '-' x 25, '-' x 6
+             );
 
   # Get all tested modules
   #
@@ -810,24 +798,24 @@ sub showProveInfo
       for( my $tpi = 0; $tpi <= $#{$testPrograms}; $tpi++)
       {
         my $tProgram = $testPrograms->[$tpi];
-	my $testStatus = $cfm->get_kvalue( "/Matrix/$module/$OSNAME/Perl/$pVersion"
-	  				, $tProgram
-					);
-	say sprintf( "%-45s %-8s %-9s %-25s %-6s"
-	  	   , ($prevModName eq $module ? '' : $module)
-		   , ($prevModName eq $module ? '' : $moduleVersion)
-		   , ($prevPVersion eq $pVersion
-		       ? ' '
-		       : ($minPerlVersion eq $pVersion
-		           ? '*'
-			   : ' '
-			 ) . $pVersion
-		     )
-		   , $tProgram, $testStatus
-		   );
+        my $testStatus = $cfm->get_kvalue( "/Matrix/$module/$OSNAME/Perl/$pVersion"
+                                        , $tProgram
+                                        );
+        say sprintf( "%-45s %-8s %-9s %-25s %-6s"
+                   , ($prevModName eq $module ? '' : $module)
+                   , ($prevModName eq $module ? '' : $moduleVersion)
+                   , ($prevPVersion eq $pVersion
+                       ? ' '
+                       : ($minPerlVersion eq $pVersion
+                           ? '*'
+                           : ' '
+                         ) . $pVersion
+                     )
+                   , $tProgram, $testStatus
+                   );
 
-	$prevModName = $module;
-	$prevPVersion = $pVersion;
+        $prevModName = $module;
+        $prevPVersion = $pVersion;
       }
     }
   }
@@ -849,11 +837,11 @@ sub showMetricInfo
   $cfm->select_document(0);
 
   say sprintf( "\n%-45s %-14s %-9s %-5s"
-      	     , 'Module', 'Critic 5-1', 'Av McCabe', '#subs'
+             , 'Module', 'Critic 5-1', 'Av McCabe', '#subs'
              );
   say sprintf( "%45s %14s %9s %5s"
-      	     , '-' x 45, '-' x 14, '-' x 9, '-' x 5
-	     );
+             , '-' x 45, '-' x 14, '-' x 9, '-' x 5
+             );
 
   # Get all tested modules
   #
@@ -875,11 +863,11 @@ sub showMetricInfo
     my $methods = $cfm->get_keys("/Matrix/$module/Statistics/Methods");
 
     say sprintf( "%-45s %-14s %9.2f %5d"
-	       , ($prevModName eq $module ? '' : $module)
+               , ($prevModName eq $module ? '' : $module)
                , $critic_1to5
                , $cfm->get_value( "AvMcCabe", $mstat) // 0
                , scalar(@$methods)
-	       );
+               );
 
     $prevModName = $module;
   }
@@ -932,11 +920,11 @@ sub showCriticInfo
 
     say "\nModule: $moduleName";
     say sprintf( "  %-3s %-4s %-3s %1s %-s"
-      	       , 'Crt', 'Line', 'Col', 'S', 'Description'
-	       );
+               , 'Crt', 'Line', 'Col', 'S', 'Description'
+               );
     say sprintf( "  %3s %4s %3s %1s %s"
-      	       , '-' x 3, '-' x 4, '-' x 3, '-', '-' x 30
-	       );
+               , '-' x 3, '-' x 4, '-' x 3, '-', '-' x 30
+               );
     my $critics = $cfm->get_value("/Matrix/$moduleName/Critics");
     for( my $criticCount = 0; $criticCount <= $#{$critics}; $criticCount++)
     {
@@ -952,13 +940,13 @@ sub showCriticInfo
 
       say sprintf( "  %3d %4d %3d %1s %-s"
                  , $criticCount + 1, $line, $column, $severity, $description
-		 );
+                 );
       if( ($criticCount + 1) ~~ @$criticNumbers )
       {
-	say "    Policy:        ", $critics->[$criticCount]{policy};
+        say "    Policy:        ", $critics->[$criticCount]{policy};
         say "    Element_class: ", $critics->[$criticCount]{element_class};
-	say "    Explanation    ", $critics->[$criticCount]{explanation};
-	say "    Source         ", $critics->[$criticCount]{source};
+        say "    Explanation    ", $critics->[$criticCount]{explanation};
+        say "    Source         ", $critics->[$criticCount]{source};
         say "\n", $critics->[$criticCount]{diagnostics};
       }
     }
