@@ -70,7 +70,8 @@ sub BUILD
     # Error codes
     #
     $self->code_reset;
-    $self->const( 'C_DIRSCREATED',qw(M_INFO M_SUCCESS));
+    $self->const( 'C_INFO',             qw(M_INFO M_SUCCESS));
+    $self->const( 'C_DIRSCREATED',      qw(M_INFO M_SUCCESS));
 #    $self->const( '',qw(M_INFO M_SUCCESS));
 #    $self->const( '',qw(M_INFO M_SUCCESS));
 #    $self->const( '',qw(M_INFO M_SUCCESS));
@@ -91,6 +92,7 @@ sub BUILD
 my $self = main->new;
 
 my $app = AppState->instance;
+$app->initialize;
 $app->check_directories;
 
 #-------------------------------------------------------------------------------
@@ -151,7 +153,7 @@ $cfm->set_documents([]) unless $cfm->nbr_documents;
 my @args = $cmd->get_arguments;
 if( @args )
 {
-  say "Creating new distribution environments"
+  $self->sayit( "Creating new distribution environments", $self->C_INFO);
 
   foreach my $distro_name (@args)
   {
@@ -210,6 +212,8 @@ sub createNewDistro
 {
   my( $self, $distro_name) = @_;
 
+  $self->sayit( "Creating distribution $distro_name", $self->C_INFO);
+
   my $app = AppState->instance;
   my $cmd = $app->get_app_object('CommandLine');
   my $log = $app->get_app_object('Log');
@@ -231,7 +235,7 @@ sub createNewDistro
                          , {mode => oct(760)}
                          );
 
-    $self->_log( "Directories created", $self->C_DIRSCREATED);
+    $self->sayit( "Directories created", $self->C_DIRSCREATED);
 
 
     $cfm->add_config_object( 'Project'
@@ -242,7 +246,6 @@ sub createNewDistro
                            );
 
     $self->leave unless $self->loadProjectConfig;
-
   }
 
   return;
@@ -260,10 +263,27 @@ sub updateDistro
   my $cfm = $app->get_app_object('ConfigManager');
 
   my $distro_name = '';
-  say "Update $distro_name distribution"
+  say "Update $distro_name distribution";
 
   return;
 }
+
+#-------------------------------------------------------------------------------
+#
+sub sayit
+{
+  my( $self, $message, $code) = @_;
+
+  my $app = AppState->instance;
+  my $cmd = $app->get_app_object('CommandLine');
+  my $log = $app->get_app_object('Log');
+
+  $self->_log( $message, $code);
+  say $message if $cmd->get_option('verbose');
+
+  return;
+}
+
 
 
 
