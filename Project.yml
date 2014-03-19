@@ -1,15 +1,16 @@
 # Yaml file describing several parts of the project
 #
 ---
-Abstract: Set of modules to maintain an application state
-License: Perl
-Copyright: 2013 - 2014
+Application:
+ abstract: Set of modules to maintain an application state
+ license: Perl
+ copyright: 2014
 
-Author:
- name: Marcel Timmerman
- email: mt1957@gmail.com
- cpan: MARTIMM
- github: MARTIMM
+ author:
+  name: Marcel Timmerman
+  email: mt1957@gmail.com
+
+ notes:
 
 #-------------------------------------------------------------------------------
 # Bugs to repair, use version of AppState.
@@ -17,8 +18,7 @@ Author:
 # BugfixCount is reset on Release upgrade.
 #
 Bugs:
- - bug:
-   issue:
+ - issue:
     date:
     priority:
     found in project version:
@@ -27,15 +27,7 @@ Bugs:
     fixed in project version:
     date:
     description:
-    modules or programs:
-
-
-#-------------------------------------------------------------------------------
-# What needs to be added changed and removed (+ on front means DONE! :-b )
-#
-Todo:
- - Program to create and modify a Project.yml file
- - Program to create and modify a distribution environment
+    modules/programs:
 
 #-------------------------------------------------------------------------------
 # What is changed, use version of program.
@@ -63,6 +55,23 @@ Tests:
 Manifest:
 
 #-------------------------------------------------------------------------------
+# Git info
+#
+Git:
+ github:
+  account: MARTIMM
+ git-ignore-list:
+  - '.*'
+
+#  - 'Distribution-Tests/'
+
+#-------------------------------------------------------------------------------
+# CPAN info
+#
+Cpan:
+ account: MARTIMM
+
+#-------------------------------------------------------------------------------
 # Installation: Generated
 # Dependencies: Generated
 # Copyright: Generated
@@ -70,12 +79,12 @@ Manifest:
 #
 Readme:
 
- Introduction: >
+ introduction: >
   The Dutch Tool Chest is a series of scripts I found usefull. The tools are
   ordered into catagories where it might belong.
 
 
- Body: |
+ body: |
   File modifications
   ------------------
 
@@ -104,3 +113,10 @@ Readme:
       Searches for every installed module using @INC and writes the information
       into a file ModuleList.Perl-x.y.z.txt where x.y.z is the current version.
 
+
+#-------------------------------------------------------------------------------
+# What needs to be added changed and removed (+ on front means DONE! :-b )
+#
+Todo:
+ - Program to create and modify a Project.yml file
+ - Program to create and modify a distribution environment
