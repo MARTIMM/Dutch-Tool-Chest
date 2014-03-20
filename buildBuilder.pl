@@ -367,7 +367,7 @@ EOTXT
                    );
     $cfm->set_value( 'Readme/example', <<EOTXT
     use $distro_name;
-    my \$obj = $distro_name->new(...);
+    my \$obj = $distro_name->new();
 EOTXT
                    );
     $cfm->set_value( 'Tests'
@@ -487,7 +487,7 @@ extends qw(AppState::Ext::Constants);
 
 use AppState;
 
-...
+#...
 
 sub BUILD
 {
@@ -504,7 +504,7 @@ sub BUILD
   }
 }
 
-...
+#...
 
 # End of package
 #
@@ -521,7 +521,7 @@ EOCODE
     print $F <<EOCODE;    
 use Moose;
 
-...
+#...
 
 # End of package
 #
@@ -546,12 +546,12 @@ sub new
   
   my \$self = {\%options};
 
-  ...
+  #...
   
   return bless \$self, \$class;
 }
 
-...
+#...
 
 # End of package
 #
@@ -619,7 +619,7 @@ extends qw(AppState::Ext::Constants);
 
 use AppState;
 
-...
+#...
 
 sub BUILD
 {
@@ -638,9 +638,9 @@ sub BUILD
 
 # Make object from the main class
 #
-my \$self = main->new(...);
+my \$self = main->new();
 
-...
+#...
 
 # End of program
 #
@@ -652,12 +652,12 @@ sub DEMOLISH
 {
   my(\$self) = \@_;
   
-  ...
+  #...
 }
 
 # Subroutines
 #
-...
+#...
 
 EOCODE
   }
@@ -670,15 +670,15 @@ EOCODE
     print $F <<EOCODE;    
 use Moose;
 
-...
+#...
 
 __PACKAGE__->meta->make_immutable;
 
 # Make object from the main class
 #
-my \$self = main->new(...);
+my \$self = main->new();
 
-...
+#...
 
 # End of program
 #
@@ -691,12 +691,12 @@ sub DEMOLISH
 {
   my(\$self) = \@_;
   
-  ...
+  #...
 }
 
 # Subroutines
 #
-...
+#...
 
 EOCODE
   }
@@ -707,13 +707,13 @@ EOCODE
   else
   {
     print $F <<EOCODE;    
-...
+#...
 
 # Make object from the main class
 #
-my \$self = main->new(...);
+my \$self = main->new();
 
-...
+#...
 
 # End of program
 #
@@ -728,7 +728,7 @@ sub new
   
   my \$self = {\%options};
 
-  ...
+  #...
   
   return bless \$self, \$class;
 }
@@ -739,12 +739,12 @@ sub DESTROY
 {
   my(\$self) = \@_;
   
-  ...
+  #...
 }
 
 # Subroutines
 #
-...
+#...
 
 EOCODE
   }
@@ -759,7 +759,6 @@ EOCODE
 
   return;
 }
-
 
 #-------------------------------------------------------------------------------
 # Generate the test program
@@ -785,16 +784,9 @@ sub generate_test_program
   # Write 
   #
   print $F <<EOCODE;
-#!/usr/bin/env perl
-#
 use Modern::Perl;
-use version; our \$VERSION = qv('v$module_version');
-use $perl_version;
 
-use $distro_name;
-
-# What I found very usefull is to setup the main as if it where a module so
-# it can be instantiated, inherit other modules and so forth.
+use Test::More;
 
 EOCODE
 
@@ -804,138 +796,65 @@ EOCODE
   if( $use_appstate )
   {
     print $F <<EOCODE;    
-use Moose;
-extends qw(AppState::Ext::Constants);
-
 use AppState;
+require File::Path;
 
-...
-
-sub BUILD
-{
-  my(\$self) = \@_;
-
-  if( \$self->meta->is_mutable )
-  {
-    \$self->code_reset;
-#    \$self->const( 'C_SOMECONST0', qw( M_F_INFO M_SUCCESS));
-#    \$self->const( 'C_SOMECONST1', qw( M_F_ERROR M_FAIL));
-#    \$self->const( 'C_SOMECONST2', qw( M_WARNING M_FORCED));
-
-    __PACKAGE__->meta->make_immutable;
-  }
-}
-
-# Make object from the main class
+#-------------------------------------------------------------------------------
+# Init
 #
-my \$self = main->new(...);
+my \$app = AppState->instance;
+\$app->use_work_dir(0);
+\$app->use_temp_dir(0);
+\$app->initialize( config_dir => 't/100-Test');
+\$app->check_directories;
 
-...
 
-# End of program
+my \$log = \$app->get_app_object('Log');
+#\$log->show_on_error(0);
+\$log->show_on_warning(1);
+\$log->do_append_log(0);
+
+\$log->start_logging;
+
+\$log->do_flush_log(1);
+\$log->log_mask(\$log->M_SEVERITY);
+
+\$log->add_tag('100');
+
+#-------------------------------------------------------------------------------
+# Start testing
 #
-\$self->leave;
+BEGIN { use_ok('$distro_name') };
 
-# Destructor
-#
-sub DEMOLISH
-{
-  my(\$self) = \@_;
-  
-  ...
-}
+#...
 
-# Subroutines
+#-------------------------------------------------------------------------------
+# Cleanup and exit
 #
-...
+done_testing();
+\$app->cleanup;
+
+File::Path::remove_tree( 't/100-Test', {verbose => 1});
 
 EOCODE
+
   }
   
   #-----------------------------------------------------------------------------
-  # If Moose option is set, then the module is setup using Moose only
-  #
-  elsif( $use_moose )
-  {
-    print $F <<EOCODE;    
-use Moose;
-
-...
-
-__PACKAGE__->meta->make_immutable;
-
-# Make object from the main class
-#
-my \$self = main->new(...);
-
-...
-
-# End of program
-#
-\$self->DESTROY;
-exit(0);
-
-# Destructor
-#
-sub DEMOLISH
-{
-  my(\$self) = \@_;
-  
-  ...
-}
-
-# Subroutines
-#
-...
-
-EOCODE
-  }
-  
-  #-----------------------------------------------------------------------------
-  # If no Moose option is set, then the module is setup as a plain class
+  # Anything else can be tested without wisles and bells
   #
   else
   {
     print $F <<EOCODE;    
-...
-
-# Make object from the main class
+#-------------------------------------------------------------------------------
+# Start testing
 #
-my \$self = main->new(...);
+BEGIN { use_ok('$distro_name') };
 
-...
-
-# End of program
+#-------------------------------------------------------------------------------
+# Cleanup and exit
 #
-\$self->DESTROY;
-exit(0);
-
-# Constructor
-#
-sub new
-{
-  my( \$class, \%options) = \@_;
-  
-  my \$self = {\%options};
-
-  ...
-  
-  return bless \$self, \$class;
-}
-
-# Destructor
-#
-sub DESTROY
-{
-  my(\$self) = \@_;
-  
-  ...
-}
-
-# Subroutines
-#
-...
-
+done_testing();
 EOCODE
   }
 
@@ -945,7 +864,7 @@ EOCODE
   print $F "\n";
 
   close $F;
-  $self->sayit( "$distro_dir/script/program.pl generated", $self->C_INFO);
+  $self->sayit( "$distro_dir/t/100-test.t generated", $self->C_INFO);
 
   return;
 }
