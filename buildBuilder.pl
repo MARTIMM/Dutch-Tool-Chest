@@ -15,6 +15,9 @@ use File::Path();
 use DateTime;
 use Software::License;
 
+use Text::Wrap;
+$Text::Wrap::columns = 78;
+
 #-------------------------------------------------------------------------------
 #
 has description =>
@@ -313,7 +316,6 @@ sub createNewDistro
                            );
 
     my $username = getpwuid $REAL_USER_ID;
-    my $dateExample = $date->year . ' ' . $date->month . ' ' . $date->day;
 
     $cfm->set_documents([{}]);
     $cfm->select_document(0);
@@ -330,13 +332,21 @@ sub createNewDistro
     $cfm->set_value( 'Application/perl-version', $perl_version);
     $cfm->set_value( 'Application/use_moose', $use_moose);
     $cfm->set_value( 'Application/use_appstate', $use_appstate);
-    $cfm->set_value( 'Bugs/dependencies', {});
-    $cfm->set_value( 'Bugs/install-test', {});
+    $cfm->set_value( 'Application/dependencies', {});
+    $cfm->set_value( 'Application/install-test', {});
+    $cfm->set_value( 'Bugs', {});
     $cfm->set_value( 'Changes'
-                   , { $dateExample => <<EOTXT
+                   , [ { date           => $date->ymd
+                       , version        => '0.0.1'
+                       , module         => $distro_name
+                       , program        => 'program.pl'
+                       , descriptions   => 
+                         [ <<EOTXT
 Original version; created by buildBuilder version $VERSION
 EOTXT
-                     }
+                         ]
+                       }
+                     ]
                    );
     $cfm->set_value( 'Cpan/Account', '');
     $cfm->set_value( 'Git/github/account', '');
@@ -376,7 +386,7 @@ EOTXT
                        }
                      ]
                    );
-    $cfm->set_value( 'Todo', { $dateExample => 'Think of what to build'});
+    $cfm->set_value( 'Todo', { $date->ymd => 'Think of what to build'});
 
     $cfm->save;
     $self->sayit( 'Project.yml generated', $self->C_INFO);
@@ -389,11 +399,9 @@ EOTXT
     $self->find_config_dependencies;
 
     $self->generate_readme( $cfm, $distro_dir);
-#    $self->generate_changes($cfm);
-#    $self->generate_manifest($cfm);
-#    $self->generate_module($cfm);
-#    $self->generate_program($cfm);
-#    $self->generate_buildpl($cfm);
+    $self->generate_changes( $cfm, $distro_dir);
+#    $self->generate_manifest( $cfm, $distro_dir);
+#    $self->generate_buildpl( $cfm, $distro_dir);
   }
 
   return;
@@ -1008,9 +1016,47 @@ EOCODE
   return;
 }
 
+#-------------------------------------------------------------------------------
+#
+sub generate_changes
+{
+  my( $self, $cfm, $distro_dir) = @_;
 
+  my $app = AppState->instance;
+  my $log = $app->get_app_object('Log');
 
+  #-----------------------------------------------------------------------------
+  # Open the readme file
+  #
+  open my $F, '>', "$distro_dir/Changes";
 
+  #-----------------------------------------------------------------------------
+  # Write changes
+  #
+  foreach my $change (@{$cfm->get_value('Changes')})
+  {
+    my $module = $change->{module} // '';
+    my $program = " $change->{program}" // '';
+    
+    print $F sprintf( "\n%-9s %-12s %s%s\n"
+                    , $change->{version}, $change->{date}, $module, $program
+                    );
+    foreach my $description (@{$change->{descriptions}})
+    {
+      print $F Text::Wrap::wrap( "        - ", "            " x 10, $description);
+    }
+  }
+  
+  #-----------------------------------------------------------------------------
+  # Close
+  #
+  say $F "\n";
+
+  close $F;
+  $self->sayit( 'Changes generated', $self->C_INFO);
+
+  return;
+}
 
 
 
