@@ -341,9 +341,14 @@ sub createNewDistro
                        , module         => $distro_name
                        , program        => 'program.pl'
                        , descriptions   => 
-                         [ <<EOTXT
-Original version; created by buildBuilder version $VERSION
-EOTXT
+                         [ "Original version; created by buildBuilder version $VERSION"
+                         , ( $use_appstate
+                             ? 'Use AppState modules in program and module'
+                             : ( $use_moose
+                                 ? 'Use Moose modules in program and modules'
+                                 : 'Simple setup in program and modules'
+                               )
+                           )
                          ]
                        }
                      ]
@@ -1043,7 +1048,7 @@ sub generate_changes
                     );
     foreach my $description (@{$change->{descriptions}})
     {
-      print $F Text::Wrap::wrap( "        - ", "            " x 10, $description);
+      say $F Text::Wrap::wrap( "        - ", "            " x 10, $description);
     }
   }
   
