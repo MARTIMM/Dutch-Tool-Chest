@@ -44,10 +44,12 @@ has arguments =>
       sub
       { return
         [ [ 'distribution-name' => <<EODSCR
-Optional a name can be given when nothing has been generated. The directory and
-a minimum number of files are generated. After that phase in the directory the
-Project.yml file can be used to add information and change a few of the
-distribution files.
+Name of the distribution. The argument is optional. When used, the distribution
+will be generated anew in a directory in the same way h2xs does. The directory
+and a minimum number of files are generated. The setup will be all based on the
+module Module::Build. In the distribution directory is a YAML file named
+Project.yml. The file can be edited after which the program can be used to
+update several files in the distribution.
 EODSCR
           ]
         ]
@@ -298,7 +300,7 @@ sub createNewDistro
 
     # Create directories
     #
-    File::Path::make_path( $distro_dir, {mode => oct(755)});
+#    File::Path::make_path( $distro_dir, {mode => oct(755)});
 #    chdir($distro_name);
 
     File::Path::make_path( "$distro_dir/lib", "$distro_dir/$module_dir"
@@ -431,9 +433,6 @@ sub updateDistro
   my $log = $app->get_app_object('Log');
   my $cfm = $app->get_app_object('ConfigManager');
 
-  my $distro_name = '';
-  $self->sayit( "\nUpdate $distro_name distribution", $self->C_INFO);
-
   # Read Project.yml
   #
   $cfm->add_config_object( 'Project'
@@ -444,6 +443,35 @@ sub updateDistro
                          );
 
   $self->leave unless $self->loadProjectConfig;
+
+  $cfm->select_document(0);
+
+  my $distro_name = $cfm->get_value('Application/name');
+  $self->sayit( "\nUpdate $distro_name distribution", $self->C_INFO);
+
+  my $distro_path = $distro_name;
+  $distro_path =~ s/::/\//g;
+  $distro_path .= '.pm';
+
+  my $distro_dir = '.';
+#  $distro_dir =~ s/::/-/g;
+
+  my $module_path = "lib/$distro_path";
+#  my $module_dir = "lib/$distro_path";
+#  $module_dir =~ s@/[^/]+$@@;
+
+#say "M: $module_path, $distro_path";
+#return;
+
+  $self->find_dependencies( $distro_name, $distro_dir);
+  $self->find_config_dependencies( $distro_name, $distro_dir);
+
+  $self->generate_readme( $cfm, $distro_dir);
+  $self->generate_changes( $cfm, $distro_dir);
+
+  $self->generate_buildpl( $cfm, $distro_name, $distro_dir, $module_path);
+  $self->generate_manifest_skip_list( $cfm, $distro_dir);
+  $self->generate_run_buildpl($distro_dir);
 
   return;
 }
