@@ -21,6 +21,10 @@ use Module::Metadata;
 use Text::Wrap;
 $Text::Wrap::columns = 78;
 
+use constant
+{ buildbuilder_markfile => '.buildBuilder'
+};
+
 #-------------------------------------------------------------------------------
 #
 has description =>
@@ -65,8 +69,10 @@ has options =>
       sub
       { return
         [ [ 'appstate|A'        => 'Use AppState, implicates the use of Moose']
+        , [ 'git|G!'            => 'Use Git version control system']
         , [ 'help|h'            => 'Help on this program']
         , [ 'moose|M'           => 'Use Moose in modules']
+        , [ 'scrutinize|S'      => 'Run scrutinize program']
         , [ 'verbose|v+'        => 'Show info, errors and warning depending repeats']
         , [ 'version|V=s'       => 'Minimal perl version']
         ]
@@ -116,9 +122,10 @@ sub BUILD
 #    $self->const( '',qw(M_INFO M_SUCCESS));
 #    $self->const( '',qw(M_INFO M_SUCCESS));
 
-    $self->const( 'C_DISTRODIREXISTS',  qw(M_ERROR M_FORCED));
+    $self->const( 'C_DISTRODIREXISTS',  qw(M_ERROR M_FAIL));
     $self->const( 'C_EVALERROR',        qw(M_ERROR M_FAIL));
-#    $self->const( '',qw(M_ERROR M_FAIL));
+    $self->const( 'C_MARKFILEFOUND',    qw(M_ERROR M_FAIL));
+    $self->const( 'C_MARKFILENOTFOUND', qw(M_ERROR M_FAIL));
 #    $self->const( '',qw(M_ERROR M_FAIL));
 #    $self->const( '',qw(M_ERROR M_FAIL));
 
@@ -135,9 +142,7 @@ my $self = main->new;
 # Get AppState object. Plan is not to use a temp and work directory.
 #
 my $app = AppState->instance;
-$app->use_work_dir(0);
-$app->use_temp_dir(0);
-$app->initialize;
+$app->initialize( use_work_dir => 0, use_temp_dir => 0);
 $app->check_directories;
 
 #-------------------------------------------------------------------------------
@@ -204,8 +209,6 @@ if( $cfm->nbr_documents == 0 )
 my @args = $cmd->get_arguments;
 if( @args )
 {
-#  $self->sayit( "\nCreating new distribution environments", $self->C_INFO);
-
   foreach my $distro_name (@args)
   {
     $self->createNewDistro($distro_name);
@@ -243,7 +246,7 @@ sub loadProjectConfig
       my $f = $cfm->configFile;
       $f =~ s@.*?([^/]+)$@$1@;
 
-      $self->_log( "Problems reading project file $f, abort ..."
+      $self->wlog( "Problems reading project file $f, abort ..."
                  , $self->C_PROJECTREADERR
                  );
     }
@@ -263,13 +266,21 @@ sub createNewDistro
 {
   my( $self, $distro_name) = @_;
 
+  # Prevent builder to build distribution in toplevel distribution directory
+  #
+  if( -r buildbuilder_markfile )
+  {
+    $self->wlog( 'Build builder markfile found.', $self->C_MARKFILEFOUND);
+    $self->leave;
+  }
+
   my $date = DateTime->now(time_zone => 'Europe/Amsterdam');
 
   my $app = AppState->instance;
   my $cmd = $app->get_app_object('CommandLine');
   my $log = $app->get_app_object('Log');
   my $cfm = $app->get_app_object('ConfigManager');
-  
+
   my $perl_version = $cmd->get_option('version') // $PERL_VERSION;
   my $use_moose = $cmd->get_option('moose') // '';
   my $use_appstate = $cmd->get_option('appstate') // '';
@@ -333,7 +344,7 @@ sub createNewDistro
     $cfm->set_value( 'Application/documentation', ['README']);
     $cfm->set_value( 'Application/licenses', ['Perl_5']);
     $cfm->set_value( 'Application/notes', []);
-    $cfm->set_value( 'Application/version', '0.0.1');
+    use version; $cfm->set_value( 'Application/version', qv('0.0.1'));
     $cfm->set_value( 'Application/perl-version', $perl_version);
     $cfm->set_value( 'Application/use_moose', $use_moose);
     $cfm->set_value( 'Application/use_appstate', $use_appstate);
@@ -361,13 +372,22 @@ sub createNewDistro
     $cfm->set_value( 'Cpan/Account', '');
     $cfm->set_value( 'Git/github/account', '');
     $cfm->set_value( 'Git/github/repository', '');
-    $cfm->set_value( 'Git/github/git-ignore-list', ["'.*'"]);
+    $cfm->set_value( 'Git/github/git-ignore-list'
+                   , [ qw( .* ~* *.bak
+                           MYMETA* MANIFEST.SKIP
+                           blib _build
+                           Build Build.bat Build.COM BUILD.COM build.com
+                           Distribution-Tests/*
+                         )
+                     ]
+                   );
     $cfm->set_value( 'Manifest-skip-list'
                    , [ '\./\..*', '\b' . $distro_dir . '-[\d\.\_]+'
                      , qw( ^MYMETA\. \bBuild$ \bBuild.bat$ ~$ \.bak$
                            ^MANIFEST\.SKIP
                            \bblib \b_build
                            \bBuild.COM$ \bBUILD.COM$ \bbuild.com$
+                           \bDistribution-Tests/\.* \bProject.yml$
                          )
                      ]
                    );
@@ -396,6 +416,7 @@ EOTXT
                    );
     $cfm->set_value( 'Tests'
                    , [ { module => $distro_name
+                       , 'test-programs' => [ 't/100-test.t' ]
                        }
                      ]
                    );
@@ -417,6 +438,11 @@ EOTXT
     $self->generate_buildpl( $cfm, $distro_name, $distro_dir, $module_path);
     $self->generate_manifest_skip_list( $cfm, $distro_dir);
     $self->generate_run_buildpl($distro_dir);
+
+    $self->generate_git($distro_dir) if $cmd->get_option('git');
+    $self->run_scrutinize($distro_dir) if $cmd->get_option('scrutinize');
+
+    $self->mark_distribution($distro_dir);
   }
 
   return;
@@ -427,6 +453,14 @@ EOTXT
 sub updateDistro
 {
   my( $self) = @_;
+
+  # Check if this is a builded distribution of this program.
+  #
+  if( ! -r buildbuilder_markfile )
+  {
+    $self->wlog( 'Build builder markfile not found.', $self->C_MARKFILENOTFOUND);
+    $self->leave;
+  }
 
   my $app = AppState->instance;
   my $cmd = $app->get_app_object('CommandLine');
@@ -473,6 +507,9 @@ sub updateDistro
   $self->generate_manifest_skip_list( $cfm, $distro_dir);
   $self->generate_run_buildpl($distro_dir);
 
+  $self->generate_git($distro_dir) if $cmd->get_option('git');
+  $self->run_scrutinize($distro_dir) if $cmd->get_option('scrutinize');
+
   return;
 }
 
@@ -486,7 +523,7 @@ sub sayit
   my $cmd = $app->get_app_object('CommandLine');
   my $log = $app->get_app_object('Log');
 
-  $self->_log( $message, $code);
+  $self->wlog( $message, $code);
   say $message if $cmd->get_option('verbose');
 
   return;
@@ -1348,5 +1385,60 @@ sub generate_run_buildpl
   return;
 }
 
+#-------------------------------------------------------------------------------
+#
+sub generate_git
+{
+  my( $self, $distro_dir) = @_;
+
+  chdir($distro_dir);
+  system('/usr/bin/git init') unless -d '.git';
+
+  open my $GI, '>', '.gitignore';
+  my $gi_list = $cfm->get_value('Git/github/git-ignore-list');
+  foreach my $gi_item (@$gi_list)
+  {
+    say $GI $gi_item;
+  }
+  
+  close $GI;
+  
+  system('/usr/bin/git status') unless -d '.git';
+  chdir('..');
+  return;
+}
+
+#-------------------------------------------------------------------------------
+#
+sub run_scrutinize
+{
+  my( $self, $distro_dir) = @_;
+
+  chdir($distro_dir);
+say "Run scrutinize in ", `pwd`;
+
+  system('scrutinize --prove -lq');
+  system('scrutinize --critic -q');
+  system('scrutinize --metric -lq');
+  
+  chdir('..');
+  return;
+}
+
+#-------------------------------------------------------------------------------
+#
+sub mark_distribution
+{
+  my( $self, $distro_dir) = @_;
+
+  chdir($distro_dir);
+
+  open my $GI, '>', buildbuilder_markfile;
+  say $GI 'Build';
+  close $GI;
+  
+  chdir('..');
+  return;
+}
 
 
