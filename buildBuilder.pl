@@ -81,6 +81,19 @@ has options =>
     , lazy                      => 1
     );
 
+has search_dependency_store =>
+    ( is                        => 'rw'
+    , isa                       => 'HashRef'
+    , default                   => sub { return {}; }
+    , traits                    => ['Hash']
+    , handles                   =>
+      { get_search_dependency           => 'get'
+      , set_search_dependency           => 'set'
+      , get_search_dependency_keys      => 'keys'
+      , clear_search_dependency_store   => 'clear'
+      }
+    );
+
 has dependencies =>
     ( is                        => 'rw'
     , isa                       => 'HashRef'
@@ -93,15 +106,15 @@ has dependencies =>
       }
     );
 
-has config_dependencies =>
+has test_dependencies =>
     ( is                        => 'rw'
     , isa                       => 'HashRef'
     , default                   => sub { return {}; }
     , traits                    => ['Hash']
     , handles                   =>
-      { get_conf_dependency     => 'get'
-      , set_conf_dependency     => 'set'
-      , get_conf_dep_keys       => 'keys'
+      { get_test_dependency     => 'get'
+      , set_test_dependency     => 'set'
+      , get_test_dep_keys       => 'keys'
       }
     );
 
@@ -126,7 +139,7 @@ sub BUILD
     $self->const( 'C_EVALERROR',        qw(M_ERROR M_FAIL));
     $self->const( 'C_MARKFILEFOUND',    qw(M_ERROR M_FAIL));
     $self->const( 'C_MARKFILENOTFOUND', qw(M_ERROR M_FAIL));
-#    $self->const( '',qw(M_ERROR M_FAIL));
+    $self->const( 'C_ILLDISTRONAME',    qw(M_ERROR M_FAIL));
 #    $self->const( '',qw(M_ERROR M_FAIL));
 
     $self->meta->make_immutable;
@@ -246,9 +259,9 @@ sub loadProjectConfig
       my $f = $cfm->configFile;
       $f =~ s@.*?([^/]+)$@$1@;
 
-      $self->wlog( "Problems reading project file $f, abort ..."
-                 , $self->C_PROJECTREADERR
-                 );
+      $self->sayit( "Problems reading project file $f, abort ..."
+                  , $self->C_PROJECTREADERR
+                  );
     }
 
     else
@@ -266,11 +279,21 @@ sub createNewDistro
 {
   my( $self, $distro_name) = @_;
 
+  # Check distro name
+  #
+  if( $distro_name !~ m/^[\w_:]+$/ )
+  {
+    $self->sayit( "Illegal ditribution name '$distro_name'"
+                , $self->C_ILLDISTRONAME
+                );
+    return;
+  }
+
   # Prevent builder to build distribution in toplevel distribution directory
   #
   if( -r buildbuilder_markfile )
   {
-    $self->wlog( 'Build builder markfile found.', $self->C_MARKFILEFOUND);
+    $self->sayit( 'Build builder markfile found.', $self->C_MARKFILEFOUND);
     $self->leave;
   }
 
@@ -284,7 +307,9 @@ sub createNewDistro
   my $perl_version = $cmd->get_option('version') // $PERL_VERSION;
   my $use_moose = $cmd->get_option('moose') // '';
   my $use_appstate = $cmd->get_option('appstate') // '';
-  
+  my $use_scrutinize = $cmd->get_option('scrutinize') // '';
+  my $use_git = $cmd->get_option('git') // '';
+
   my $distro_path = $distro_name;
   $distro_path =~ s/::/\//g;
   $distro_path .= '.pm';
@@ -296,13 +321,15 @@ sub createNewDistro
   my $module_dir = "lib/$distro_path";
   $module_dir =~ s@/[^/]+$@@;
 #  my($module_filename) = $distro_name =~ m/::(;
-  
+
 #say "DN: $distro_name, $distro_path, $distro_dir, $module_path, $module_dir";
 #$self->leave;
 
   if( -d $distro_dir )
   {
-    $self->sayit( "Directory $distro_name exists", $self->C_DISTRODIREXISTS);
+    $self->sayit( "Directory for distribution $distro_name exists"
+                , $self->C_DISTRODIREXISTS
+                );
   }
 
   else
@@ -337,9 +364,13 @@ sub createNewDistro
     $cfm->select_document(0);
 
     $cfm->set_value( 'Application/name', $distro_name);
-    $cfm->set_value( 'Application/abstract', '');
+    $cfm->set_value( 'Application/abstract'
+                   , 'Module to do something interresting'
+                   );
     $cfm->set_value( 'Application/author/name', $username);
-    $cfm->set_value( 'Application/author/email', '');
+    $cfm->set_value( 'Application/author/email'
+                   , "$username\@some-provider.com"
+                   );
     $cfm->set_value( 'Application/copyright', $date->year);
     $cfm->set_value( 'Application/documentation', ['README']);
     $cfm->set_value( 'Application/licenses', ['Perl_5']);
@@ -348,15 +379,23 @@ sub createNewDistro
     $cfm->set_value( 'Application/perl-version', $perl_version);
     $cfm->set_value( 'Application/use_moose', $use_moose);
     $cfm->set_value( 'Application/use_appstate', $use_appstate);
-    $cfm->set_value( 'Application/dependencies', {});
-    $cfm->set_value( 'Application/install-test', {});
+    $cfm->set_value( 'Application/use_scrutinize', $use_scrutinize);
+    $cfm->set_value( 'Application/use_git', $use_git);
+#    $cfm->set_value( 'Application/dependencies', {});
+#    $cfm->set_value( 'Application/install-test', {});
+    $cfm->set_value( 'Build/modulebuildrc'
+                   , { '*'      => { verbose => 0}
+#                     , install  => { install_base => '/home/marcel/Software'}
+                     , test     => { verbose => 1}
+                     }
+                   );
     $cfm->set_value( 'Bugs', {});
     $cfm->set_value( 'Changes'
                    , [ { date           => $date->ymd
                        , version        => '0.0.1'
                        , module         => $distro_name
-                       , program        => 'program.pl'
-                       , descriptions   => 
+                       , program        => 'example_program.pl'
+                       , descriptions   =>
                          [ "Original version; created by buildBuilder version $VERSION"
                          , ( $use_appstate
                              ? 'Use AppState modules in program and module'
@@ -372,30 +411,31 @@ sub createNewDistro
     $cfm->set_value( 'Cpan/Account', '');
     $cfm->set_value( 'Git/github/account', '');
     $cfm->set_value( 'Git/github/repository', '');
-    $cfm->set_value( 'Git/github/git-ignore-list'
-                   , [ qw( .* ~* *.bak
+    $cfm->set_value( 'Git/git-ignore-list'
+                   , [ qw( .git ~* *.bak .directory
                            MYMETA* MANIFEST.SKIP
                            blib _build
                            Build Build.bat Build.COM BUILD.COM build.com
-                           Distribution-Tests/*
+                           Distribution-Tests/* Old/* Tests/* *.tgz *.tb2
+                           *.tar *.tar.gz *.tar.b2 pm_to_blib
+                           script/example_program.pl
                          )
                      ]
                    );
     $cfm->set_value( 'Manifest-skip-list'
-                   , [ '\./\..*', '\b' . $distro_dir . '-[\d\.\_]+'
+                   , [ '^\..*', "\\b$distro_dir" . '-[\d\.\_]+'
                      , qw( ^MYMETA\. \bBuild$ \bBuild.bat$ ~$ \.bak$
                            ^MANIFEST\.SKIP
                            \bblib \b_build
                            \bBuild.COM$ \bBUILD.COM$ \bbuild.com$
                            \bDistribution-Tests/\.* \bProject.yml$
+                           \bOld/.* \bTests/.* .*\.tgz$ .*\.tb2$
+                           .*\.tar$ .*\.tar\.gz$ .*\.tar\.b2$ \bpm_to_blib$
+                           ^script/example_program.pl$
                          )
                      ]
                    );
-#    $cfm->set_value( 'Manifest'
-#                   , [ qw( README Changes MANIFEST Build.PL t Doc)
-#                     , 'lib/$distro_name'
-#                     ]
-#                   );
+
     $cfm->set_value( 'Readme/description', <<EOTXT
     The README is used to introduce the module and provide instructions on how
     to install the module, any machine dependencies it may have (for example C
@@ -425,24 +465,28 @@ EOTXT
     $cfm->save;
     $self->sayit( 'Project.yml generated', $self->C_INFO);
 
+
+    $self->mark_distribution($distro_dir);
+
     $self->generate_module( $cfm, $distro_name, $module_path);
     $self->generate_program( $cfm, $distro_name, $distro_dir);
     $self->generate_test_program( $cfm, $distro_name, $distro_dir);
 
     $self->find_dependencies( $distro_name, $distro_dir);
-    $self->find_config_dependencies( $distro_name, $distro_dir);
+#    $self->find_config_dependencies( $distro_name, $distro_dir);
 
-    $self->generate_readme( $cfm, $distro_dir);
+    $self->generate_readme_and_license( $cfm, $distro_dir);
     $self->generate_changes( $cfm, $distro_dir);
 
     $self->generate_buildpl( $cfm, $distro_name, $distro_dir, $module_path);
     $self->generate_manifest_skip_list( $cfm, $distro_dir);
     $self->generate_run_buildpl($distro_dir);
 
-    $self->generate_git($distro_dir) if $cmd->get_option('git');
-    $self->run_scrutinize($distro_dir) if $cmd->get_option('scrutinize');
+    $self->run_scrutinize($distro_dir)
+       if $cfm->get_value('Application/use_scrutinize');;
 
-    $self->mark_distribution($distro_dir);
+    $self->generate_git($distro_dir)
+       if $cfm->get_value('Application/use_git');
   }
 
   return;
@@ -458,7 +502,9 @@ sub updateDistro
   #
   if( ! -r buildbuilder_markfile )
   {
-    $self->wlog( 'Build builder markfile not found.', $self->C_MARKFILENOTFOUND);
+    $self->sayit( 'Build builder markfile not found.'
+                , $self->C_MARKFILENOTFOUND
+                );
     $self->leave;
   }
 
@@ -498,17 +544,19 @@ sub updateDistro
 #return;
 
   $self->find_dependencies( $distro_name, $distro_dir);
-  $self->find_config_dependencies( $distro_name, $distro_dir);
+#  $self->find_config_dependencies( $distro_name, $distro_dir);
 
-  $self->generate_readme( $cfm, $distro_dir);
+  $self->generate_readme_and_license( $cfm, $distro_dir);
   $self->generate_changes( $cfm, $distro_dir);
 
   $self->generate_buildpl( $cfm, $distro_name, $distro_dir, $module_path);
   $self->generate_manifest_skip_list( $cfm, $distro_dir);
   $self->generate_run_buildpl($distro_dir);
 
-  $self->generate_git($distro_dir) if $cmd->get_option('git');
-  $self->run_scrutinize($distro_dir) if $cmd->get_option('scrutinize');
+  $self->generate_git($distro_dir)
+     if $cfm->get_value('Application/use_git');
+  $self->run_scrutinize($distro_dir)
+     if $cfm->get_value('Application/use_scrutinize');;
 
   return;
 }
@@ -545,14 +593,14 @@ sub generate_module
   my $use_appstate = $cfm->get_value('Application/use_appstate');
 
   my $abstract = $cfm->get_value('Application/abstract');
-  
+
   #-----------------------------------------------------------------------------
   # Open the module file
   #
   open my $F, '>', "$module_path";
 
   #-----------------------------------------------------------------------------
-  # Write 
+  # Write
   #
   print $F <<EOCODE;
 package $distro_name;
@@ -569,7 +617,7 @@ EOCODE
   #
   if( $use_appstate )
   {
-    print $F <<EOCODE;    
+    print $F <<EOCODE;
 use Moose;
 extends qw(AppState::Ext::Constants);
 
@@ -599,8 +647,6 @@ sub BUILD
 1;
 
 EOCODE
-
-print $F "__END__\n\n=head1 NAME\n\n$distro_name - $abstract\n\n=cut\n";
   }
 
   #-----------------------------------------------------------------------------
@@ -608,7 +654,7 @@ print $F "__END__\n\n=head1 NAME\n\n$distro_name - $abstract\n\n=cut\n";
   #
   elsif( $use_moose )
   {
-    print $F <<EOCODE;    
+    print $F <<EOCODE;
 use Moose;
 
 #...
@@ -620,24 +666,24 @@ __PACKAGE__->meta->make_immutable;
 
 EOCODE
   }
-  
+
   #-----------------------------------------------------------------------------
   # If no Moose option is set, then the module is setup as a plain class
   #
   else
   {
-    print $F <<EOCODE;    
+    print $F <<EOCODE;
 
 # Constructor
 #
 sub new
 {
   my( \$class, \%options) = \@_;
-  
+
   my \$self = {\%options};
 
   #...
-  
+
   return bless \$self, \$class;
 }
 
@@ -649,6 +695,22 @@ sub new
 
 EOCODE
   }
+
+  #-----------------------------------------------------------------------------
+  # A piece of pod
+  #
+  print $F "__END__\n\n=head1 NAME\n\n$distro_name - $abstract\n";
+
+  print $F "\n=head1 VERSION\n";
+  print $F "\n=head1 SUBROUTINES/METHODS\n";
+  print $F "\n=head1 DIAGNOSTICS\n";
+  print $F "\n=head1 CONFIGURATION AND ENVIRONMENT\n";
+  print $F "\n=head1 DEPENDENCIES\n";
+  print $F "\n=head1 INCOMPATIBILITIES\n";
+  print $F "\n=head1 BUGS AND LIMITATIONS\n";
+  print $F "\n=head1 LICENSE AND COPYRIGHT\n";
+
+  print $F "\n=cut\n";
 
   #-----------------------------------------------------------------------------
   # Close
@@ -670,7 +732,7 @@ sub generate_program
 
   my $app = AppState->instance;
   my $cmd = $app->get_app_object('CommandLine');
-
+  
   my $module_version = $cfm->get_value('Application/version');
   my $perl_version = $cfm->get_value('Application/perl-version');
   my $use_moose = $cfm->get_value('Application/use_moose');
@@ -679,10 +741,10 @@ sub generate_program
   #-----------------------------------------------------------------------------
   # Open the module file
   #
-  open my $F, '>', "$distro_dir/script/program.pl";
+  open my $F, '>', "$distro_dir/script/example_program.pl";
 
   #-----------------------------------------------------------------------------
-  # Write 
+  # Write
   #
   print $F <<EOCODE;
 #!/usr/bin/env perl
@@ -703,7 +765,7 @@ EOCODE
   #
   if( $use_appstate )
   {
-    print $F <<EOCODE;    
+    print $F <<EOCODE;
 use Moose;
 extends qw(AppState::Ext::Constants);
 
@@ -741,7 +803,7 @@ my \$self = main->new();
 sub DEMOLISH
 {
   my(\$self) = \@_;
-  
+
   #...
 }
 
@@ -751,13 +813,13 @@ sub DEMOLISH
 
 EOCODE
   }
-  
+
   #-----------------------------------------------------------------------------
   # If Moose option is set, then the module is setup using Moose only
   #
   elsif( $use_moose )
   {
-    print $F <<EOCODE;    
+    print $F <<EOCODE;
 use Moose;
 
 #...
@@ -780,7 +842,7 @@ exit(0);
 sub DEMOLISH
 {
   my(\$self) = \@_;
-  
+
   #...
 }
 
@@ -790,13 +852,13 @@ sub DEMOLISH
 
 EOCODE
   }
-  
+
   #-----------------------------------------------------------------------------
   # If no Moose option is set, then the module is setup as a plain class
   #
   else
   {
-    print $F <<EOCODE;    
+    print $F <<EOCODE;
 #...
 
 # Make object from the main class
@@ -815,11 +877,11 @@ exit(0);
 sub new
 {
   my( \$class, \%options) = \@_;
-  
+
   my \$self = {\%options};
 
   #...
-  
+
   return bless \$self, \$class;
 }
 
@@ -828,7 +890,7 @@ sub new
 sub DESTROY
 {
   my(\$self) = \@_;
-  
+
   #...
 }
 
@@ -871,7 +933,7 @@ sub generate_test_program
   open my $F, '>', "$distro_dir/t/100-test.t";
 
   #-----------------------------------------------------------------------------
-  # Write 
+  # Write
   #
   print $F <<EOCODE;
 use Modern::Perl;
@@ -885,7 +947,7 @@ EOCODE
   #
   if( $use_appstate )
   {
-    print $F <<EOCODE;    
+    print $F <<EOCODE;
 use AppState;
 require File::Path;
 
@@ -929,13 +991,13 @@ File::Path::remove_tree( 't/100-Test', {verbose => 1});
 EOCODE
 
   }
-  
+
   #-----------------------------------------------------------------------------
   # Anything else can be tested without wisles and bells
   #
   else
   {
-    print $F <<EOCODE;    
+    print $F <<EOCODE;
 #-------------------------------------------------------------------------------
 # Start testing
 #
@@ -965,124 +1027,83 @@ sub find_dependencies
 {
   my( $self, $distro_name, $distro_dir) = @_;
 
-  # Search in each .pl or .pm file for use or require statements. Look in
-  # the directories under lib and under script.
-  # Collect the module names and find the versions of them.
-  #
-  File::Find::find
-  (
-    { wanted => sub
-      {
-        my $dir = $File::Find::dir;
-        my $file = $_;
+  my $dep_data = { dependencies => [ "$distro_dir/lib", "$distro_dir/script"]
+                 , test_dependencies => [ "$distro_dir/t"]
+                 };
 
-        return if -d $file;
-        return if "$dir/$file" =~ m/\.git\//;
+  foreach my $dependencies (keys %$dep_data)
+  {
+    # Clear the search store
+    #
+    $self->clear_search_dependency_store;
 
-        return unless $file =~ m/.*?\.(pl|pm)$/s;
-
-        my $ppi_doc = PPI::Document->new($file);
-        my $incl_nodes = $ppi_doc->find
-                    ( sub { $_[1]->isa('PPI::Statement::Include') }
-                    );
-        foreach my $node (@$incl_nodes)
-        {
-          my $type = $node->type // '';
-          my $module = $node->module // '';
-          my $module_version = $node->module_version // '0';
-          
-          if( $module and !$module_version )
-          {
-#say "Module: $module";
-            my $meta = Module::Metadata->new_from_module($module);
-            $module_version = $meta->version if defined $meta;
-          }
-          
-          # Only add/modify when not defined or has zero version
-          #
-          my $mod_dep = $self->get_dependency($module);
-          if( $type =~ m/^use|require$/ and $module
-              and $module !~ m/^$distro_name\b/
-              and ( !defined $mod_dep or !$mod_dep )
-            )
-          {
-            $self->set_dependency( $module => $module_version);
-          }
-        }
+    # Search in each .pl or .pm file for use or require statements. Look in
+    # the directories under lib and under script.
+    # Collect the module names and find the versions of them.
+    #
+    File::Find::find
+    ( { wanted => sub { $self->search_through_files( $distro_name
+                                                   , $distro_dir
+                                                   , @_
+                                                   );
+                      }
       }
-    }, "$distro_dir/lib", "$distro_dir/script"
-  );
+    , @{$dep_data->{$dependencies}}
+    );
+
+    # Get results from the search store and put them in the dependencies hash
+    #
+    $self->$dependencies($self->search_dependency_store);
+  }
 
   return;
 }
 
 #-------------------------------------------------------------------------------
 #
-sub find_config_dependencies
+sub search_through_files
 {
   my( $self, $distro_name, $distro_dir) = @_;
+  my $dir = $File::Find::dir;
+  my $file = $_;
 
-  # First add Module::Build which cannot be found from Build.PL because it
-  # is not yet generated.
-  #
-  my $meta = Module::Metadata->new_from_module('Module::Build');
-  my $module_version = $meta->version if defined $meta;
-  $self->set_conf_dependency( 'Module::Build' => $module_version // '');
+  return if -d $file;
+  return if "$dir/$file" =~ m/\.git\//;
+  return unless $file =~ m/.*?\.(t|pl|PL|pm)$/s;
 
-  # Search in each .t file for use or require statements. Look in
-  # the directories under t.
-  # Collect the module names and find the versions of them.
-  #
-  File::Find::find
-  (
-    { wanted => sub
-      {
-        my $dir = $File::Find::dir;
-        my $file = $_;
+  my $ppi_doc = PPI::Document->new($file);
+  my $incl_nodes = $ppi_doc->find
+              ( sub { $_[1]->isa('PPI::Statement::Include') }
+              );
+  foreach my $node (@$incl_nodes)
+  {
+    my $type = $node->type // '';
+    my $module = $node->module // '';
+    my $module_version = $node->module_version // '0';
 
-        return if -d $file;
-        return if "$dir/$file" =~ m/\.git\//;
+    if( $module and !$module_version )
+    {
+#say "Search in: $module";
+      my $meta = Module::Metadata->new_from_module($module);
+      $module_version = $meta->version if defined $meta;
+    }
 
-        return unless $file =~ m/.*?\.(t)$/s;
-
-        my $ppi_doc = PPI::Document->new($file);
-        my $incl_nodes = $ppi_doc->find
-                    ( sub { $_[1]->isa('PPI::Statement::Include') }
-                    );
-        foreach my $node (@$incl_nodes)
-        {
-          my $type = $node->type // '';
-          my $module = $node->module // '';
-          my $module_version = $node->module_version // '0';
-          
-          if( $module and !$module_version )
-          {
-#say "Test: $module";
-            my $meta = Module::Metadata->new_from_module($module);
-            $module_version = $meta->version if defined $meta;
-          }
-          
-          # Only add/modify when not defined or has zero version
-          #
-          my $mod_dep = $self->get_conf_dependency($module);
-          if( $type =~ m/^use|require$/ and $module
-              and $module !~ m/^$distro_name\b/
-              and ( !defined $mod_dep or !$mod_dep )
-            )
-          {
-            $self->set_conf_dependency( $module => $module_version);
-          }
-        }
-      }
-    }, "$distro_dir/t"
-  );
-
-  return;
+    # Only add/modify when not defined or has zero version
+    #
+    my $mod_dep = $self->get_search_dependency ($module);
+    if( $type =~ m/^use|require$/ and $module
+        and $module !~ m/^$distro_name\b/
+        and ( !defined $mod_dep or !$mod_dep )
+      )
+    {
+      $self->set_search_dependency( $module => $module_version);
+    }
+  }
 }
 
 #-------------------------------------------------------------------------------
 #
-sub generate_readme
+sub generate_readme_and_license
 {
   my( $self, $cfm, $distro_dir) = @_;
 
@@ -1101,13 +1122,13 @@ sub generate_readme
   open my $F, '>', "$distro_dir/README";
 
   my $first_line = "$distro_name version $version";
-  
+
   #-----------------------------------------------------------------------------
   # Write the top line about the module and version
   #
   say $F $first_line;
   say $F '=' x length($first_line);
-  
+
   #-----------------------------------------------------------------------------
   # Write the introduction and body
   #
@@ -1120,7 +1141,6 @@ $description
 EXAMPLE
 
 $example
-
 EOTXT
 
   #-----------------------------------------------------------------------------
@@ -1135,9 +1155,9 @@ EOTXT
   }
 
   say $F "\n  Installation and testing";
-  foreach my $dep (sort $self->get_conf_dep_keys)
+  foreach my $dep (sort $self->get_test_dep_keys)
   {
-    say $F sprintf( "    %-40s %-10s", $dep, $self->get_conf_dependency($dep));
+    say $F sprintf( "    %-40s %-10s", $dep, $self->get_test_dependency($dep));
   }
 
   #-----------------------------------------------------------------------------
@@ -1149,11 +1169,10 @@ INSTALLATION
 
 To install this module type the following:
 
-        perl Build.PL
-        Build
-        Build test
-        Build install
-
+    perl Build.PL
+    Build
+    Build test
+    Build install
 EOTXT
 
   #-----------------------------------------------------------------------------
@@ -1182,6 +1201,7 @@ EOCODE
 
     say $F $license_obj->notice;
     say $F $license_obj->url // '';
+    say $F "See also file LICENSE_$license\n";
   }
 
   #-----------------------------------------------------------------------------
@@ -1191,6 +1211,39 @@ EOCODE
 
   close $F;
   $self->sayit( 'README generated', $self->C_INFO);
+
+
+
+  #-----------------------------------------------------------------------------
+  # Generate license files with full text
+  #
+  foreach my $license (@{$cfm->get_value('Application/licenses')})
+  {
+    # Skip if the file is already generated. The content should never change.
+    #
+    next if -r "$distro_dir/LICENSE_$license";
+
+    open my $F, '>', "$distro_dir/LICENSE_$license";
+
+    my $license_obj;
+    my $code = <<EOCODE;
+require Software::License::$license;
+\$license_obj = Software::License::$license->new ({holder => \$author});
+EOCODE
+
+    eval($code);
+    my $error = $@;
+    if( $error )
+    {
+      $self->sayit( "Error evaluating code: $error", $self->C_EVALERROR);
+      $self->leave;
+    }
+
+    say $F $license_obj->fulltext;
+
+    close $F;
+    $self->sayit( "LICENSE_$license generated", $self->C_INFO);
+  }
 
   return;
 }
@@ -1216,7 +1269,7 @@ sub generate_changes
   {
     my $module = $change->{module} // '';
     my $program = " $change->{program}" // '';
-    
+
     print $F sprintf( "\n%-9s %-12s %s%s\n"
                     , $change->{version}, $change->{date}, $module, $program
                     );
@@ -1228,7 +1281,7 @@ sub generate_changes
       say $F Text::Wrap::wrap( "        - ", "            ", $description);
     }
   }
-  
+
   #-----------------------------------------------------------------------------
   # Close
   #
@@ -1236,6 +1289,111 @@ sub generate_changes
 
   close $F;
   $self->sayit( 'Changes generated', $self->C_INFO);
+
+  return;
+}
+
+#-------------------------------------------------------------------------------
+#
+sub generate_buildpl
+{
+  my( $self, $cfm, $distro_name, $distro_dir, $module_path) = @_;
+
+  my $app = AppState->instance;
+#  my $cmd = $app->get_app_object('CommandLine');
+  my $log = $app->get_app_object('Log');
+
+  #-----------------------------------------------------------------------------
+  # Open the readme file
+  #
+  open my $F, '>', "$distro_dir/Build.PL";
+
+  #-----------------------------------------------------------------------------
+  # Write Build.PL
+  #
+  my $author = $cfm->get_value('Application/author/name');
+  my $email = $cfm->get_value('Application/author/email');
+  my $abstract = $cfm->get_value('/Application/abstract');
+  my $license = $cfm->get_value('/Application/licenses')->[0];
+
+#  my $verbose = $cmd->get_option('verbose') ? '1' : '0';
+#  my $quiet = $cmd->get_option('quiet') ? '1' : '0';
+
+  my $mp = $module_path;
+  $mp =~ s@^[^/]+/@@;
+
+  print $F <<EOCODE;
+#!/usr/bin/perl
+#
+require Modern::Perl;
+require Module::Build;
+#require Module::Build::ConfigData;
+
+my \$build = Module::Build->new
+( module_name           => '$distro_name'
+, dist_name             => '$distro_dir'
+, abstract              => '$abstract'
+, author                => '$author <$email>'
+
+, license               => '$license'
+, create_licence        => 0            # License is generated independently
+
+, release_status        => 'stable'
+
+, tap_harness_args      => { timer => 1
+#                           , verbosity => 1
+                           , failures => 1
+                           , show_count => 1
+                           }
+, extra_manify_args     => { utf8 => 1 }
+
+EOCODE
+
+  # Requirements of the modules
+  #
+  if( $self->get_dep_keys )
+  {
+    print $F "\n, requires =>\n  { ";
+    my $str_list =
+       join( "\n  , "
+           , map
+             { sprintf( "%-43s => %s"
+                      , "'$_'"
+                      , "'" . $self->get_dependency($_) . "'"
+                      )
+             }
+             (sort $self->get_dep_keys)
+           );
+    say $F $str_list, "\n  }\n";
+  }
+
+  # Requirements of the installation and testing
+  #
+  if( $self->get_test_dep_keys )
+  {
+    print $F ", test_requires =>\n  { ";
+    my $str_list =
+       join( "\n  , "
+           , map
+             { sprintf( "%-43s => %s"
+                      , "'$_'"
+                      , "'" . $self->get_test_dependency($_) . "'"
+                      )
+             }
+             (sort $self->get_test_dep_keys)
+           );
+    say $F $str_list, "\n  }";
+  }
+
+  print $F ");\n\n\$build->create_build_script();\n";
+
+  #-----------------------------------------------------------------------------
+  # Close
+  #
+  say $F "\n";
+
+  close $F;
+  $self->sayit( 'Build.PL generated', $self->C_INFO);
 
   return;
 }
@@ -1270,141 +1428,64 @@ sub generate_manifest_skip_list
 
 #-------------------------------------------------------------------------------
 #
-sub generate_buildpl
-{
-  my( $self, $cfm, $distro_name, $distro_dir, $module_path) = @_;
-
-  my $app = AppState->instance;
-  my $log = $app->get_app_object('Log');
-
-  #-----------------------------------------------------------------------------
-  # Open the readme file
-  #
-  open my $F, '>', "$distro_dir/Build.PL";
-
-  #-----------------------------------------------------------------------------
-  # Write Build.PL
-  #
-  my $author = $cfm->get_value('Application/author/name');
-  my $email = $cfm->get_value('Application/author/email');
-  my $mp = $module_path;
-  $mp =~ s@^[^/]+/@@;
-
-  print $F <<EOCODE;
-#!/usr/bin/perl
-#
-require Modern::Perl;
-require Module::Build;
-#require Module::Build::ConfigData;
-
-my \$build = Module::Build->new
-( module_name		=> '$distro_name'
-, license		=> 'perl'
-, create_licence	=> 1
-, dist_author		=> '$author <$email>'
-, release_status	=> 'stable'
-, abstract_from		=> '$mp'
-
-, tap_harness_args	=> { timer => 1
-#			   , verbosity => 1
-			   , failures => 1
-			   , show_count => 1
-			   }
-EOCODE
-
-  # Requirements of the modules
-  #
-  if( $self->get_dep_keys )
-  {
-    print $F "\n, requires =>\n  { ";
-    my $str_list =
-       join( "\n  , "
-           , map
-             { sprintf( "%-43s => %s"
-                      , "'$_'"
-                      , "'" . $self->get_dependency($_) . "'"
-                      )
-             }
-             (sort $self->get_dep_keys)
-           );
-    say $F $str_list, "\n  }\n";
-  }
-
-  # Requirements of the installation and testing
-  #
-  if( $self->get_conf_dep_keys )
-  {
-    print $F ", configure_requires =>\n  { ";
-    my $str_list =
-       join( "\n  , "
-           , map
-             { sprintf( "%-43s => %s"
-                      , "'$_'"
-                      , "'" . $self->get_conf_dependency($_) . "'"
-                      )
-             }
-             (sort $self->get_conf_dep_keys)
-           );
-    say $F $str_list, "\n  }";
-  }
-
-  print $F ");\n\n\$build->create_build_script();\n";
-  
-  #-----------------------------------------------------------------------------
-  # Close
-  #
-  say $F "\n";
-
-  close $F;
-  $self->sayit( 'Build.PL generated', $self->C_INFO);
-
-  return;
-}
-
-#-------------------------------------------------------------------------------
-#
 sub generate_run_buildpl
 {
   my( $self, $distro_dir) = @_;
 
-  chdir($distro_dir);
-  
+  chdir($distro_dir) unless $distro_dir eq '.';
+
+  my $app = AppState->instance;
+  my $cfm = $app->get_app_object('ConfigManager');
+
+  my $show_program;
+  open my $MBRC, '>', '.modulebuildrc';
+  foreach my $program (@{$cfm->get_keys('Build/modulebuildrc')})
+  {
+    $show_program = 1;
+    foreach my $argument (@{$cfm->get_keys("Build/modulebuildrc/$program")})
+    {
+      my $value = $cfm->get_value("Build/modulebuildrc/$program/$argument");
+      say $MBRC sprintf( "%-18s --%s %s"
+                       , $show_program ? $program : ''
+                       , $argument
+                       , $value
+                       );
+
+      $show_program = 0;
+    }
+  }
+
+  close $MBRC;
+  $self->sayit( '.modulebuildrc written', $self->C_INFO);
+  $ENV{'MODULEBUILDRC'} = '.modulebuildrc';
+  $self->sayit( '$ENV{MODULEBUILDRC} set', $self->C_INFO);
+
+
+  # Fake a manifest file after which it will be generated when Build exists
+  #
+  system('/usr/bin/echo Build.PL >MANIFEST') unless -r 'MANIFEST';
+
+  # Generate the Build program
+  #
   system('/usr/bin/env perl Build.PL');
   $self->sayit( 'Build.PL executed', $self->C_INFO);
-  
-  system('./Build');
-  $self->sayit( 'Build executed', $self->C_INFO);
-  
-  system('./Build test');
-  $self->sayit( 'Build test executed', $self->C_INFO);
-  
+
+  # Generate the real MANIFEST
+  #
   system('./Build manifest');
   $self->sayit( 'Build manifest executed', $self->C_INFO);
 
-  chdir('..');
-  return;
-}
+  # Make the distribution
+  #
+  system('./Build');
+  $self->sayit( 'Build executed', $self->C_INFO);
 
-#-------------------------------------------------------------------------------
-#
-sub generate_git
-{
-  my( $self, $distro_dir) = @_;
+  # Test the distribution
+  #
+  system('./Build test');
+  $self->sayit( 'Build test executed', $self->C_INFO);
 
-  chdir($distro_dir);
-  system('/usr/bin/git init') unless -d '.git';
-
-  open my $GI, '>', '.gitignore';
-  my $gi_list = $cfm->get_value('Git/github/git-ignore-list');
-  foreach my $gi_item (@$gi_list)
-  {
-    say $GI $gi_item;
-  }
-  
-  close $GI;
-  
-  system('/usr/bin/git status') unless -d '.git';
-  chdir('..');
+  chdir('..') unless $distro_dir eq '.';
   return;
 }
 
@@ -1414,14 +1495,19 @@ sub run_scrutinize
 {
   my( $self, $distro_dir) = @_;
 
-  chdir($distro_dir);
-say "Run scrutinize in ", `pwd`;
+  chdir($distro_dir) unless $distro_dir eq '.';
+#say "Run scrutinize in [$distro_dir] ->", `pwd`;
+#$self->leave;
 
-  system('scrutinize --prove -lq');
-  system('scrutinize --critic -q');
-  system('scrutinize --metric -lq');
+  my $app = AppState->instance;
+  my $cmd = $app->get_app_object('CommandLine');
+  my $verbose = $cmd->get_option('verbose') ? '-v' : '-q';
   
-  chdir('..');
+  system("scrutinize $verbose --prove -l");
+  system("scrutinize $verbose --critic");
+  system("scrutinize $verbose --metric -l");
+
+  chdir('..') unless $distro_dir eq '.';
   return;
 }
 
@@ -1431,13 +1517,48 @@ sub mark_distribution
 {
   my( $self, $distro_dir) = @_;
 
-  chdir($distro_dir);
+  my $dt = DateTime->now(time_zone => 'Europe/Amsterdam');
+  my $date = $dt->ymd;
+  my $time = $dt->hms;
 
-  open my $GI, '>', buildbuilder_markfile;
-  say $GI 'Build';
+  open my $GI, '>', "$distro_dir/" . buildbuilder_markfile;
+  say $GI "Distribution build by buildBuilder at $date $time";
   close $GI;
+
+  return;
+}
+
+#-------------------------------------------------------------------------------
+#
+sub generate_git
+{
+  my( $self, $distro_dir) = @_;
+
+  chdir($distro_dir) unless $distro_dir eq '.';
+
+  # If directory .git does not exist then a new git must be generated
+  #
+  my $new_git = -d '.git' ? 0 : 1;
+  system('/usr/bin/git init') if $new_git;
+
+  open my $GI, '>', '.gitignore';
+  my $gi_list = $cfm->get_value('Git/git-ignore-list');
+  foreach my $gi_item (@$gi_list)
+  {
+    say $GI $gi_item;
+  }
+
+  close $GI;
+
+  if( $new_git )
+  {
+    system('/usr/bin/git add .');
+    system('/usr/bin/git commit -m "Initial commit of distribution"');
+  }
   
-  chdir('..');
+  system('/usr/bin/git status');
+
+  chdir('..') unless $distro_dir eq '.';
   return;
 }
 
