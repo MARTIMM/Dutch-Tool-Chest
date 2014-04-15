@@ -14,6 +14,8 @@ use Perl::Critic::Utils::McCabe;
 use Perl::MinimumVersion;
 use Text::Wrap ('$columns');
 $columns = 80;
+use PPI;
+
 
 #-------------------------------------------------------------------------------
 #
@@ -169,7 +171,8 @@ sub BUILD
     #
     $self->code_reset;
     $self->const( 'C_PROJECTREADERR',   qw(M_ERROR M_FAIL));
-    $self->const( 'C_TESTFILENTFND',    qw(M_WARNING));
+    $self->const( 'C_TESTFILENTFND',    qw(M_WARNING M_FORCED));
+    $self->const( 'C_EVALERR',          qw(M_WARNING M_FORCED));
 
     $self->meta->make_immutable;
   }
@@ -178,7 +181,7 @@ sub BUILD
   # Setup application
   #
   my $app = AppState->instance;
-  $app->initialize( config_dir => './Distribution-Tests');
+  $app->initialize( config_dir => './Distribution-Tests', use_temp_dir => 0);
   $app->check_directories;
 
   #-----------------------------------------------------------------------------
@@ -244,20 +247,20 @@ $cmd->config_getopt_long(qw(bundling));
 
 # Defaults
 #
-$cmd->setOption( blib => 0, lib => 0, verbose => 1);
+$cmd->set_option( blib => 0, lib => 0, verbose => 1);
 
 # Initialize
 #
 $cmd->initialize( $self->description, $self->arguments, $self->options
                 , $self->usage, $self->examples
                 );
-#say (join ', ', map {"$_=" . $cmd->getOption($_)} sort $cmd->get_options);
+#say (join ', ', map {"$_=" . $cmd->get_option($_)} sort $cmd->get_options);
 
 # Noverbose or quiet will make proving less noisy
 #
-$cmd->setOption(verbose => 0) if $cmd->getOption('quiet');
+$cmd->set_option(verbose => 0) if $cmd->get_option('quiet');
 
-if( $log->get_last_error == $cmd->C_CMD_OPTPROCFAIL or $cmd->getOption('help'))
+if( $log->get_last_error == $cmd->C_CMD_OPTPROCFAIL or $cmd->get_option('help'))
 {
   say $cmd->usage;
   $self->leave;
@@ -267,19 +270,19 @@ if( $log->get_last_error == $cmd->C_CMD_OPTPROCFAIL or $cmd->getOption('help'))
 # If show check prove and critic for the selection about what to show.
 # Keep this test before tests on prove or critic
 #
-elsif( $cmd->getOption('show') )
+elsif( $cmd->get_option('show') )
 {
-  if( $cmd->getOption('prove') )
+  if( $cmd->get_option('prove') )
   {
     $self->showProveInfo;
   }
 
-  elsif( $cmd->getOption('metric') )
+  elsif( $cmd->get_option('metric') )
   {
     $self->showMetricInfo;
   }
 
-  elsif( $cmd->getOption('critic') )
+  elsif( $cmd->get_option('critic') )
   {
     $self->showCriticInfo;
   }
@@ -287,14 +290,14 @@ elsif( $cmd->getOption('show') )
 
 #-------------------------------------------------------------------------------
 #
-#elsif( $cmd->getOption('') )
+#elsif( $cmd->get_option('') )
 #{
 #}
 
 #-------------------------------------------------------------------------------
 # Because critic has been set to a default value, test prove first
 #
-elsif( $cmd->getOption('prove') )
+elsif( $cmd->get_option('prove') )
 {
   my $results = $self->testDistribution;
   $self->saveTestResults( $results);
@@ -304,7 +307,7 @@ elsif( $cmd->getOption('prove') )
 
 #-------------------------------------------------------------------------------
 #
-elsif( $cmd->getOption('metric') )
+elsif( $cmd->get_option('metric') )
 {
   my $results = $self->metricsOfDistribution;
   $self->saveMetricResults($results);
@@ -312,7 +315,7 @@ elsif( $cmd->getOption('metric') )
 
 #-------------------------------------------------------------------------------
 #
-elsif( $cmd->getOption('critic') )
+elsif( $cmd->get_option('critic') )
 {
   my $results = $self->critisizeDistribution;
   $self->saveCriticResults($results);
@@ -336,7 +339,7 @@ sub loadProjectConfig
       my $f = $cfm->configFile;
       $f =~ s@.*?([^/]+)$@$1@;
 
-      $log->write( "Problems reading project file $f, abort ..."
+      $self->wlog( "Problems reading project file $f, abort ..."
                  , $self->C_PROJECTREADERR
                  );
     }
@@ -368,17 +371,19 @@ sub testDistribution
   my $moduleNames = $cfm->get_value('/Tests');
   for( my $mti = 0; $mti <= $#{$moduleNames}; $mti++)
   {
-    my $moduleName = $moduleNames->[$mti]{Module};
+    my $moduleName = $moduleNames->[$mti]{module};
 
     next if @args and !($moduleName ~~ @args);
 
 #    my( @states, @tPrgs);
     my @tPrgs;
 
-    say "\nTesting module $moduleName using" unless $cmd->getOption('quiet');
-    my $testPrograms = $cfm->get_value( "/TestPrograms", $moduleNames->[$mti]);
+    say "\nTesting module $moduleName using" unless $cmd->get_option('quiet');
+    my $testPrograms = $cfm->get_value( "/test-programs", $moduleNames->[$mti]);
     foreach my $testProgram (@$testPrograms)
     {
+say "Test: $testProgram";
+
       if( -r $testProgram )
       {
         # Need to test the program only once
@@ -389,7 +394,7 @@ sub testDistribution
           next;
         }
 
-        say "   program $testProgram" unless $cmd->getOption('quiet');
+        say "   program $testProgram" unless $cmd->get_option('quiet');
         push @tPrgs, $testProgram;
         my $state = $self->prove($testProgram);
         $self->set_tested_program( $testProgram => $state);
@@ -398,7 +403,7 @@ sub testDistribution
 
       else
       {
-        $self->_log( "Test program $testProgram not found"
+        $self->wlog( "Test program $testProgram not found"
                    , $self->C_TESTFILENTFND
                    );
       }
@@ -413,6 +418,7 @@ sub testDistribution
     push @results, [ $moduleName, \@tPrgs];
   }
 
+say "Tests: Done";
   return \@results;
 }
 
@@ -429,11 +435,11 @@ sub prove
   my $prove = App::Prove->new;
 
   $prove->process_args(@ARGV);
-  $prove->verbose($cmd->getOption('verbose'));
+  $prove->verbose($cmd->get_option('verbose'));
 #  $prove->quiet(1);
-  $prove->lib($cmd->getOption('lib'));
-  $prove->comments($cmd->getOption('comments'));
-  $prove->blib($cmd->getOption('blib'));
+  $prove->lib($cmd->get_option('lib'));
+  $prove->comments($cmd->get_option('comments'));
+  $prove->blib($cmd->get_option('blib'));
   $prove->merge(1);
   $prove->argv([$testProgram]);
 #  $prove->state([qw( failed all save)]);
@@ -509,11 +515,17 @@ sub getModuleVersion
   my( $self, $module_name) = @_;
 
   my $version;
-  my $code =<<EOCODE;
-use $module_name;
-\$version = defined \$${module_name}::VERSION // '0';
-EOCODE
+  my $code = '';
+  $code .= "use lib qw(lib);\n" if $cmd->option_exists('lib');
+  $code .= "use $module_name;\n";
+  $code .= "\$version = \$${module_name}::VERSION // '0';\n";
   eval($code);
+
+  if( my $e = $@ )
+  {
+    $self->wlog( "Problems evaluating module, error='$e'", $self->C_EVALERR);
+    $version = '-';
+  }
 
   return $version;
 }
@@ -553,50 +565,86 @@ sub metricsOfDistribution
   $cfm->select_document(0);
   my $moduleNames = $cfm->get_value('/Tests');
 
+  my $acount = 0;
+  my $total_mccabe = 0;
+  my $name_sub_count = 0;
   for( my $mti = 0; $mti <= $#{$moduleNames}; $mti++)
   {
-    my $moduleName = $moduleNames->[$mti]{Module};
+    my $methods = {};
+
+    my $moduleName = $moduleNames->[$mti]{module};
     next if @args and !($moduleName ~~ @args);
 
     my $module = $moduleName;
     $module =~ s@::@/@g;
     $module = "lib/$module.pm";
 
+    # First get PPI working. We will miss any at runtime generated methods
+    # from e.g. Moose.
+    #
+    my $ppi_doc = PPI::Document->new( $module, readonly => 1);
+    my $sub_nodes = $ppi_doc->find
+#                    ( sub { $_[1]->isa('PPI::Statement::Sub') and $_[1]->name }
+                    ( sub { $_[1]->isa('PPI::Statement::Sub') }
+                    );
+    if( ref $sub_nodes eq 'ARRAY' and @$sub_nodes )
+    {
+      my @sub_names = map { $_->name || 'Anonymous_' . $acount++  } @$sub_nodes;
+      foreach my $sub (@$sub_nodes)
+      {
+        my $mccabe = Perl::Critic::Utils::McCabe::calculate_mccabe_of_sub($sub);
+#say "    $mccabe ", ref $sub, ', ', $sub->name;
+        $methods->{$sub->name} = {McCabe => $mccabe};
 
-    my $methods = {};
-    my $constructor = $moduleNames->[$mti]{Constructor};
-#say "Obj: $moduleName->$constructor";
+        $total_mccabe += $mccabe;
+        $name_sub_count++;
+      }
+    }
 
+    # Try to get a full view of all subroutines. This can only be done when
+    # evaluating the code and then testing for Moose signatures such as meta()
+    #
     my $code = '';
-    $code = 'use lib qw(lib);' if $cmd->optionExists('lib');
-    $code = "require $moduleName;";
+    $code .= 'use lib qw(lib);' if $cmd->option_exists('lib');
+    $code .= "require $moduleName;";
     eval($code);
 
-    my $newObj = $moduleName->$constructor;
-    if( $newObj->can('meta') )
+    if( my $e = $@ )
     {
-      my $meta = $newObj->meta;
-#say "Obj: $newObj, $meta";
-      my @methods = sort map {$_->fully_qualified_name;} $meta->get_all_methods;
-#      say "Subs;";
-
-      foreach my $sub (@methods)
-      {
-        next unless $sub =~ m/^${moduleName}::[^:]+$/;
-        my $mccabe = 0;# = Perl::Critic::Utils::McCabe->calculate_mccabe_of_sub($sub);
-#        say "    $mccabe $sub";
-        $methods->{$sub} = {mccabe => 0};
-      }
+      $self->wlog( "Problems evaluating module, error='$e'", $self->C_EVALERR);
     }
 
     else
     {
-      # No Moose environment ...
+      my $constructor = $moduleNames->[$mti]{constructor} // 'new';
+      my $newObj = $moduleName->$constructor;
+      if( $newObj->can('meta') )
+      {
+        my $meta = $newObj->meta;
+  #say "Obj: $newObj, $meta";
+        my @methods = sort map {$_->fully_qualified_name;} $meta->get_all_methods;
+  #      say "Subs;";
+
+        foreach my $sub (@methods)
+        {
+          # Skip any methods from inherited modules
+          #
+          next unless $sub =~ m/^${moduleName}::[^:]+$/;
+          $sub =~ s/^${moduleName}:://;
+          my $mccabe = 0;# = Perl::Critic::Utils::McCabe->calculate_mccabe_of_sub($sub);
+  #        say "    $mccabe $sub";
+          $methods->{$sub} = {mccabe => '-'} unless $methods->{$sub};
+        }
+      }
+
+      else
+      {
+        # No Moose environment ...
+      }
     }
 
-
-
-    push @results, [ $moduleName, $methods];#, $config];
+    push @results, [ $moduleName, $methods, $total_mccabe/$name_sub_count]
+      if keys %$methods;
   }
 
   return \@results;
@@ -623,6 +671,7 @@ sub saveMetricResults
     # Set information for each of the methods in the module
     #
     $cfm->set_value( "Matrix/$module/Statistics/Methods", $result->[1]);
+    $cfm->set_value( "Matrix/$module/Statistics/Module/AvMcCabe", $result->[2]);
   }
 
   $cfm->save;
@@ -647,7 +696,7 @@ sub critisizeDistribution
   my $moduleNames = $cfm->get_value('/Tests');
   for( my $mti = 0; $mti <= $#{$moduleNames}; $mti++)
   {
-    my $moduleName = $moduleNames->[$mti]{Module};
+    my $moduleName = $moduleNames->[$mti]{module};
 
     next if @args and !($moduleName ~~ @args);
 
@@ -673,7 +722,7 @@ sub runCritics
   $module =~ s@::@/@g;
   $module = "lib/$module.pm";
 
-  my %critic_args = ( -severity =>$cmd->getOption('critic') // 'brutal');
+  my %critic_args = ( -severity =>$cmd->get_option('critic') // 'brutal');
   $critic_args{-theme} = 'core';
   $critic_args{-profile} = 'PerlCriticRc' if -r 'PerlCriticRc';
   my $critic = Perl::Critic->new(%critic_args);
@@ -743,7 +792,7 @@ sub saveCriticResults
     $cfm->set_value( "LPerl", $statistics->lines_of_perl, $mstat);
     $cfm->set_value( "LPod", $statistics->lines_of_pod, $mstat);
     $cfm->set_value( "SNoSubs", $statistics->statements_other_than_subs, $mstat);
-    $cfm->set_value( "AvMcCabe", $statistics->average_sub_mccabe, $mstat);
+#    $cfm->set_value( "AvMcCabe", $statistics->average_sub_mccabe, $mstat);
     $cfm->set_value( "VSeverity", $statistics->violations_by_severity, $mstat);
     $cfm->set_value( "VPolicy", $statistics->violations_by_policy, $mstat);
     $cfm->set_value( "VTotal", $statistics->total_violations, $mstat);
@@ -792,7 +841,7 @@ sub showProveInfo
     my $perlVersions = $cfm->get_keys("/Matrix/$module/$OSNAME/Perl");
     foreach my $pVersion (sort @$perlVersions)
     {
-      # Get all testprograms used to test the module
+      # Get all test programs used to test the module
       #
       my $testPrograms = $cfm->get_keys("/Matrix/$module/$OSNAME/Perl/$pVersion");
       for( my $tpi = 0; $tpi <= $#{$testPrograms}; $tpi++)
@@ -888,7 +937,7 @@ sub showCriticInfo
   # Get the severity level for which critics must be filtered
   # Severity must be translated to a number
   #
-  my $selectSeverity = $cmd->getOption('critic');
+  my $selectSeverity = $cmd->get_option('critic');
   $selectSeverity = $self->cnvSeverityCode($selectSeverity)
     unless $selectSeverity =~ m/^\d+$/;
   $selectSeverity //= 1;
@@ -900,7 +949,7 @@ sub showCriticInfo
   # Get the numbers to select critics for displaying more information
   # on that particular critic
   #
-  my $criticNumbers = $cmd->getOption('describe');
+  my $criticNumbers = $cmd->get_option('describe');
   $criticNumbers //= [];
   @$criticNumbers = split( /,/, join( ',', @$criticNumbers));
 
@@ -918,7 +967,7 @@ sub showCriticInfo
   {
     next if @args and !($moduleName ~~ @args);
 
-    say "\nModule: $moduleName";
+    say "\nmodule: $moduleName";
     say sprintf( "  %-3s %-4s %-3s %1s %-s"
                , 'Crt', 'Line', 'Col', 'S', 'Description'
                );
@@ -979,7 +1028,7 @@ sub dropViolations
 
   else
   {
-    $self->_log( '', );
+    $self->wlog( '', );
     return;
   }
 }
@@ -988,7 +1037,7 @@ sub dropViolations
 #-------------------------------------------------------------------------------
 # Check testfiles option
 #
-elsif( $cmd->getOption('testfiles') )
+elsif( $cmd->get_option('testfiles') )
 {
   $cfm->select_config_object('Project');
   $cfm->select_document(0);

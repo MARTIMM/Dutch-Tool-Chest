@@ -40,7 +40,6 @@ See <http://www.perl.com/perl/misc/Artistic.html>
 #
 use Modern::Perl;
 use File::Find ();
-use File::Type;
 
 my $searchWord = shift @ARGV;
 if( $searchWord !~ m/\w+/ )
@@ -67,7 +66,7 @@ File::Find::find( { wanted => \&search }, @ARGV );
 if( $found_search )
 {
   local $\ = undef;
-  print "\nDo you like to substitute the words in the list found above ? > ";
+  print "\nDo you like to substitute the words in the list found above ?: ";
   my $answer = <STDIN>;
   $substitute_ok = ($answer =~ m/^y(es)?$/is) ? 1 : 0;
   print "\n";
@@ -86,13 +85,9 @@ sub search
   my $file = $_;
 
   return if -d $file;
+  return if "$dir/$file" =~ m/\.git\//;
 
-  my $ft = File::Type->new;
-  my $mime_type = $ft->mime_type($file);
-#say "T: $file = $mime_type";
-  return unless $mime_type =~ m/$regex_mime_type_test/s;
-
-#  return unless $file =~ m/.*?\.(pl|pm|yml|t|txt)$/s or -T $file;
+  return unless $file =~ m/.*?\.(PL|pl|pm|yml|t|xt|txt)$/s;
 
   local $/ = undef;
   open my $F, '<', $file;
@@ -116,13 +111,9 @@ sub substitute
   my $file = $_;
 
   return if -d $file;
+  return if "$dir/$file" =~ m/\.git\//;
 
-  my $ft = File::Type->new;
-  my $mime_type = $ft->mime_type($file);
-#say "T: $file = $mime_type";
-  return unless $mime_type =~ m/$regex_mime_type_test/s;
-
-#  return unless $file =~ m/.*?\.(pl|pm|yml|t|txt)$/s;
+  return unless $file =~ m/.*?\.(PL|pl|pm|yml|t|xt|txt)$/s;
 
   local $/ = undef;
   open my $F, '<', $file;

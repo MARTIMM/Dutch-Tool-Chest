@@ -41,7 +41,6 @@ use Modern::Perl;
 
 use Text::Tabs ();
 use File::Find ();
-#use File::Type;
 
 say "\nReplace all occurences of hard tabs with spaces\n";
 my $regex_mime_type_test = qr@application/(x-perl|octet-stream)@;
@@ -63,12 +62,7 @@ sub removeHardTabs
   return if -d $file;
   return if "$dir/$file" =~ m/\.git\//;
 
-#  my $ft = File::Type->new;
-#  my $mime_type = $ft->mime_type($file);
-#say "T: $file = $mime_type";
-#  return unless $mime_type =~ m/$regex_mime_type_test/s;
-
-  return unless $file =~ m/.*?\.(pl|pm|yml|t|txt)$/s;
+  return unless $file =~ m/.*?\.(PL|pl|pm|yml|t|xt|txt)$/s;
 
   local $/ = undef;
   open my $F, '<', $file;
