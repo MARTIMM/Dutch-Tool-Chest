@@ -1,0 +1,132 @@
+# Yaml file describing several parts of the project
+#
+---
+Application:
+ abstract: Set of modules to maintain an application state
+ license: Perl
+ copyright: 2014
+
+ author:
+  name: Marcel Timmerman
+  email: mt1957@gmail.com
+
+ notes:
+
+#-------------------------------------------------------------------------------
+# Bugs to repair, use version of AppState.
+# Format of version: Release . ChangeCount . BugfixCount
+# BugfixCount is reset on Release upgrade.
+#
+Bugs:
+ - issue:
+    date:
+    priority:
+    found in project version:
+    description:
+   fix:
+    fixed in project version:
+    date:
+    description:
+    modules/programs:
+
+#-------------------------------------------------------------------------------
+# What is changed, use version of program.
+#
+Changes:
+ - date:
+   version:
+   module:
+   program:
+   description:
+
+#-------------------------------------------------------------------------------
+# Scrutinize tests
+#
+Tests:
+ - module:
+   Constructor:
+   TestPrograms:
+
+ - program:
+   TestPrograms:
+
+#-------------------------------------------------------------------------------
+#
+Manifest:
+
+#-------------------------------------------------------------------------------
+# Git info
+#
+Git:
+ github:
+  account: MARTIMM
+ git-ignore-list:
+  - '.*'
+
+#  - 'Distribution-Tests/'
+
+#-------------------------------------------------------------------------------
+# CPAN info
+#
+Cpan:
+ account: MARTIMM
+
+#-------------------------------------------------------------------------------
+# Installation: Generated
+# Dependencies: Generated
+# Copyright: Generated
+# License: Generated
+#
+Readme:
+
+ introduction: >
+  The Dutch Tool Chest is a series of scripts I found usefull. The tools are
+  ordered into catagories where it might belong.
+
+
+ body: |
+  File modifications
+  ------------------
+
+    removeHardTabs.pl file|directory {...}
+      Removes and substitutes the hardtabs into spaces in every text found file
+
+    substitute.pl search-word replacement-word directory|File {...}
+      Subsitute a word with another in every found text file
+
+
+
+  Module checkup
+  --------------
+
+    scrutinize.pl   (use -h to get info)
+      Using a file Project.yml checks the software for failures and will
+      critisize your software. It makes use of the known programs/libraries
+      Perl::Critic and App::Prove.
+
+
+
+  Module information
+  ------------------
+
+    getInstalledModuleList.pl
+      Searches for every installed module using @INC and writes the information
+      into a file ModuleList.Perl-x.y.z.txt where x.y.z is the current version.
+
+
+#-------------------------------------------------------------------------------
+# What needs to be added changed and removed (+ on front means DONE! :-b )
+#
+Todo:
+ - Scrutinize:
+    Testing of programs
+ - BuildBuilder create and modify a distribution environment:
+    options:
+     -V=i: generate modules and programs using minimal perl version
+     -M: generate module using Moose
+     -A: generate module using AppState
+     -v: verbose, errors, warnings
+     -h: help
+ - Program to create and modify a Project.yml file
+ - Program to create and modify a distribution environment
+
