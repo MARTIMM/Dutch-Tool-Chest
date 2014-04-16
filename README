@@ -35,6 +35,17 @@ CATAGORY
       into a file ModuleList.Perl-x.y.z.txt where x.y.z is the current version.
 
 
+
+  Distribution building
+  ---------------------
+  
+    buildBuilder.pl
+      Program to create and maintain your distribution. When it creates the
+      distribution it will also make some files for use with scrutinize and git
+      depending on the options.
+
+
+
 BUGS
 
 Documentation is not available for the scrutinize program to help with the

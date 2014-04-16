@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 #
 use Modern::Perl;
-use version; our $VERSION = qv('v0.0.1');
+use version; our $VERSION = qv('v0.1.0');
 use 5.010001;
 
 use namespace::autoclean;
@@ -376,7 +376,6 @@ sub createNewDistro
     $cfm->set_value( 'Application/licenses', ['Perl_5']);
     $cfm->set_value( 'Application/notes', []);
     use version; $cfm->set_value( 'Application/version', qv('0.0.1'));
-    $cfm->set_value( 'Application/perl-version', $perl_version);
     $cfm->set_value( 'Application/use_moose', $use_moose);
     $cfm->set_value( 'Application/use_appstate', $use_appstate);
     $cfm->set_value( 'Application/use_scrutinize', $use_scrutinize);
@@ -389,6 +388,53 @@ sub createNewDistro
                      , test     => { verbose => 1}
                      }
                    );
+
+    $cfm->set_value( 'Perl/perl_version', $perl_version);
+    $cfm->set_value
+          ( 'Perl/critic_rc'
+          , { Defaults =>
+              { severity                => 3                   
+              , only                    => 1                                 
+              , force                   => 0                                 
+              , verbose                 => 4                                 
+              , top                     => 50                                
+              , theme                   => '(pbp || security) && bugs'
+              , include                 => 'NamingConventions ClassHierarchies'
+              , exclude                 => 'Variables  Modules::RequirePackage'
+              , 'criticism-fatal'       => 1                           
+              , color                   => 1                                 
+              , 'allow-unsafe'          => 1                              
+              , pager                   => 'less'                             
+              }
+
+            , 'Example::TestingAndDebugging::RequireUseStrict' =>
+              { equivalent_modules      => 'Modern::Perl'
+              , severity                => 1
+              , set_themes              => 'foo bar'
+              , add_themes              => 'baz'
+              , maximum_violations_per_document => 57
+              , arg1                    => 'value1'
+              , arg2                    => 'value2'
+              }
+
+            , 'TestingAndDebugging::RequireUseStrict' =>
+              { equivalent_modules => 'Modern::Perl'
+              }
+
+            , 'TestingAndDebugging::RequireUseWarnings' =>
+              { equivalent_modules => 'Modern::Perl'
+              }
+
+            , 'Subroutines::RequireArgUnpacking' =>
+              { short_subroutine_statements => 5
+              }
+
+            , 'Documentation::PodSpelling' =>
+              { stop_words => 'Timmerman'
+              }
+            }
+          );
+
     $cfm->set_value( 'Bugs', {});
     $cfm->set_value( 'Changes'
                    , [ { date           => $date->ymd
@@ -482,11 +528,17 @@ EOTXT
     $self->generate_manifest_skip_list( $cfm, $distro_dir);
     $self->generate_run_buildpl($distro_dir);
 
-    $self->run_scrutinize($distro_dir)
-       if $cfm->get_value('Application/use_scrutinize');;
+    if( $cfm->get_value('Application/use_scrutinize') )
+    {
+      $self->generate_perlcriticrc($distro_dir);
+      $self->run_scrutinize($distro_dir);
+    }
 
-    $self->generate_git($distro_dir)
-       if $cfm->get_value('Application/use_git');
+    if( $cfm->get_value('Application/use_git') )
+    {
+      $self->generate_gitignore($distro_dir);
+      $self->run_git($distro_dir);
+    }
   }
 
   return;
@@ -553,10 +605,10 @@ sub updateDistro
   $self->generate_manifest_skip_list( $cfm, $distro_dir);
   $self->generate_run_buildpl($distro_dir);
 
-  $self->generate_git($distro_dir)
+  $self->generate_gitignore($distro_dir)
      if $cfm->get_value('Application/use_git');
-  $self->run_scrutinize($distro_dir)
-     if $cfm->get_value('Application/use_scrutinize');;
+  $self->generate_perlcriticrc($distro_dir)
+     if $cfm->get_value('Application/use_scrutinize');
 
   return;
 }
@@ -588,7 +640,7 @@ sub generate_module
   my $cmd = $app->get_app_object('CommandLine');
 
   my $module_version = $cfm->get_value('Application/version');
-  my $perl_version = $cfm->get_value('Application/perl-version');
+  my $perl_version = $cfm->get_value('Perl/perl_version');
   my $use_moose = $cfm->get_value('Application/use_moose');
   my $use_appstate = $cfm->get_value('Application/use_appstate');
 
@@ -734,7 +786,7 @@ sub generate_program
   my $cmd = $app->get_app_object('CommandLine');
   
   my $module_version = $cfm->get_value('Application/version');
-  my $perl_version = $cfm->get_value('Application/perl-version');
+  my $perl_version = $cfm->get_value('Perl/perl_version');
   my $use_moose = $cfm->get_value('Application/use_moose');
   my $use_appstate = $cfm->get_value('Application/use_appstate');
 
@@ -923,7 +975,7 @@ sub generate_test_program
   my $cmd = $app->get_app_object('CommandLine');
 
   my $module_version = $cfm->get_value('Application/version');
-  my $perl_version = $cfm->get_value('Application/perl-version');
+  my $perl_version = $cfm->get_value('Perl/perl_version');
   my $use_moose = $cfm->get_value('Application/use_moose');
   my $use_appstate = $cfm->get_value('Application/use_appstate');
 
@@ -1491,6 +1543,51 @@ sub generate_run_buildpl
 
 #-------------------------------------------------------------------------------
 #
+sub generate_perlcriticrc
+{
+  my( $self, $distro_dir) = @_;
+
+  open my $PCRC, '>', "$distro_dir/.perlcriticrc";
+
+  my $defaults = $cfm->get_keys("Perl/critic_rc/Defaults");
+  if( ref $defaults eq 'ARRAY' )
+  {
+    say $PCRC '#' x 80, "\n", "# Default settings for Perl::Critic";
+    foreach my $default (@$defaults)
+    {
+      say $PCRC "$default = "
+        , $cfm->get_value("Perl/critic_rc/Defaults/$default");
+    }
+
+    say $PCRC '';
+  }
+
+  my $pcrc_keys = $cfm->get_keys('Perl/critic_rc');
+  foreach my $block_spec (@$pcrc_keys)
+  {
+    next if $block_spec eq 'Defaults';
+
+    my $specs = $cfm->get_keys("Perl/critic_rc/$block_spec");
+    next unless ref $specs eq 'ARRAY';
+    say $PCRC '#' x 80, "\n", "[$block_spec]";
+    
+    foreach my $spec (@$specs)
+    {
+      say $PCRC "$spec = "
+        , $cfm->get_value("Perl/critic_rc/$block_spec/$spec");
+    }
+
+    say $PCRC '';
+  }
+
+  close $PCRC;
+  $self->sayit( '.perlcriticrc generated', $self->C_INFO);
+
+  return;
+}
+
+#-------------------------------------------------------------------------------
+#
 sub run_scrutinize
 {
   my( $self, $distro_dir) = @_;
@@ -1530,7 +1627,21 @@ sub mark_distribution
 
 #-------------------------------------------------------------------------------
 #
-sub generate_git
+sub generate_gitignore
+{
+  my( $self, $distro_dir) = @_;
+
+  open my $GI, '>', "$distro_dir/.gitignore";
+  my $gi_list = $cfm->get_value('Git/git-ignore-list');
+  say $GI $_ foreach (@$gi_list);
+  close $GI;
+
+  return;
+}
+
+#-------------------------------------------------------------------------------
+#
+sub run_git
 {
   my( $self, $distro_dir) = @_;
 
@@ -1539,24 +1650,13 @@ sub generate_git
   # If directory .git does not exist then a new git must be generated
   #
   my $new_git = -d '.git' ? 0 : 1;
-  system('/usr/bin/git init') if $new_git;
-
-  open my $GI, '>', '.gitignore';
-  my $gi_list = $cfm->get_value('Git/git-ignore-list');
-  foreach my $gi_item (@$gi_list)
-  {
-    say $GI $gi_item;
-  }
-
-  close $GI;
-
   if( $new_git )
   {
+    system('/usr/bin/git init');
     system('/usr/bin/git add .');
     system('/usr/bin/git commit -m "Initial commit of distribution"');
+    system('/usr/bin/git status');
   }
-  
-  system('/usr/bin/git status');
 
   chdir('..') unless $distro_dir eq '.';
   return;

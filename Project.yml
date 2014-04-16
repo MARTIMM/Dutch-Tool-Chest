@@ -114,12 +114,23 @@ Readme:
       into a file ModuleList.Perl-x.y.z.txt where x.y.z is the current version.
 
 
+
+  Distribution building
+  ---------------------
+  
+    buildBuilder.pl
+      Program to create and maintain your distribution. When it creates the
+      distribution it will also make some files for use with scrutinize and git
+      depending on the options.
+
+
 #-------------------------------------------------------------------------------
 # What needs to be added changed and removed (+ on front means DONE! :-b )
 #
 Todo:
  - Scrutinize:
     Testing of programs
+    Create manpage
  - BuildBuilder create and modify a distribution environment:
     options:
      -V=i: generate modules and programs using minimal perl version
@@ -127,6 +138,6 @@ Todo:
      -A: generate module using AppState
      -v: verbose, errors, warnings
      -h: help
+    Create manpage
  - Program to create and modify a Project.yml file
- - Program to create and modify a distribution environment
 
