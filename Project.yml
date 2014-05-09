@@ -19,15 +19,18 @@ Application:
 #
 Bugs:
  - issue:
-    date:
-    priority:
-    found in project version:
-    description:
+    date: 2014-04-17
+    priority: 1
+    found in: buildBuilder
+    version: 0.1.0
+    description: Build.PL does not have information of script dir
    fix:
-    fixed in project version:
-    date:
-    description:
+    fixed in version: 0.1.1
+    date: 2014-04-17
+    description: |
+     Added line in generate_buildpl()
     modules/programs:
+     - buildBuilder
 
 #-------------------------------------------------------------------------------
 # What is changed, use version of program.

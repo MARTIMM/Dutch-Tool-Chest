@@ -382,7 +382,7 @@ sub testDistribution
     my $testPrograms = $cfm->get_value( "/test-programs", $moduleNames->[$mti]);
     foreach my $testProgram (@$testPrograms)
     {
-say "Test: $testProgram";
+#say "Test: $testProgram";
 
       if( -r $testProgram )
       {
@@ -406,6 +406,7 @@ say "Test: $testProgram";
         $self->wlog( "Test program $testProgram not found"
                    , $self->C_TESTFILENTFND
                    );
+        next;
       }
     }
 
@@ -418,7 +419,7 @@ say "Test: $testProgram";
     push @results, [ $moduleName, \@tPrgs];
   }
 
-say "Tests: Done";
+#say "Tests: Done";
   return \@results;
 }
 

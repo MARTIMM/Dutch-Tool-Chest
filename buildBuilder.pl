@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 #
 use Modern::Perl;
-use version; our $VERSION = qv('v0.1.0');
+use version; our $VERSION = qv('v0.1.1');
 use 5.010001;
 
 use namespace::autoclean;
@@ -140,6 +140,7 @@ sub BUILD
     $self->const( 'C_MARKFILEFOUND',    qw(M_ERROR M_FAIL));
     $self->const( 'C_MARKFILENOTFOUND', qw(M_ERROR M_FAIL));
     $self->const( 'C_ILLDISTRONAME',    qw(M_ERROR M_FAIL));
+    $self->const( 'C_PROJECTREADERR',   qw(M_ERROR M_FAIL));
 #    $self->const( '',qw(M_ERROR M_FAIL));
 
     $self->meta->make_immutable;
@@ -459,7 +460,7 @@ sub createNewDistro
     $cfm->set_value( 'Git/github/repository', '');
     $cfm->set_value( 'Git/git-ignore-list'
                    , [ qw( .git ~* *.bak .directory
-                           MYMETA* MANIFEST.SKIP
+                           MYMETA* MANIFEST* 
                            blib _build
                            Build Build.bat Build.COM BUILD.COM build.com
                            Distribution-Tests/* Old/* Tests/* *.tgz *.tb2
@@ -1398,6 +1399,7 @@ my \$build = Module::Build->new
                            , show_count => 1
                            }
 , extra_manify_args     => { utf8 => 1 }
+, script_files          => 'script'
 
 EOCODE
 
