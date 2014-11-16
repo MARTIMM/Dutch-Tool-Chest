@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 #
 use Modern::Perl;
-use version; our $VERSION = qv('v0.1.1');
+use version; our $VERSION = qv('v0.1.4');
 use 5.010001;
 
 use namespace::autoclean;
@@ -20,10 +20,22 @@ use Module::Metadata;
 
 use Text::Wrap;
 $Text::Wrap::columns = 78;
+use AppState::Ext::Meta_Constants;
 
 use constant
 { buildbuilder_markfile => '.buildBuilder'
 };
+
+#-------------------------------------------------------------------------------
+# Error codes
+#
+def_sts( 'C_DIRSCREATED',      'M_INFO', 'Directories created');
+def_sts( 'C_DISTRODIREXISTS',  'M_ERROR', 'Directory for distribution %s exists');
+def_sts( 'C_EVALERROR',        'M_ERROR', 'Error evaluating code: %s');
+def_sts( 'C_MARKFILEFOUND',    'M_ERROR', 'Build builder markfile found');
+def_sts( 'C_MARKFILENOTFOUND', 'M_ERROR', 'Build builder markfile not found');
+def_sts( 'C_ILLDISTRONAME',    'M_ERROR', 'Illegal distribution name %s');
+def_sts( 'C_PROJECTREADERR',   'M_ERROR', 'Problems reading project file %s, abort');
 
 #-------------------------------------------------------------------------------
 #
@@ -126,25 +138,8 @@ sub BUILD
 
   if( $self->meta->is_mutable )
   {
-    # Error codes
-    #
-    $self->code_reset;
-    $self->const( 'C_INFO',             qw(M_INFO M_SUCCESS));
-    $self->const( 'C_DIRSCREATED',      qw(M_INFO M_SUCCESS));
-#    $self->const( '',qw(M_INFO M_SUCCESS));
-#    $self->const( '',qw(M_INFO M_SUCCESS));
-#    $self->const( '',qw(M_INFO M_SUCCESS));
-
-    $self->const( 'C_DISTRODIREXISTS',  qw(M_ERROR M_FAIL));
-    $self->const( 'C_EVALERROR',        qw(M_ERROR M_FAIL));
-    $self->const( 'C_MARKFILEFOUND',    qw(M_ERROR M_FAIL));
-    $self->const( 'C_MARKFILENOTFOUND', qw(M_ERROR M_FAIL));
-    $self->const( 'C_ILLDISTRONAME',    qw(M_ERROR M_FAIL));
-    $self->const( 'C_PROJECTREADERR',   qw(M_ERROR M_FAIL));
-#    $self->const( '',qw(M_ERROR M_FAIL));
-
-    $self->meta->make_immutable;
   }
+  $self->meta->make_immutable;
 }
 
 #-------------------------------------------------------------------------------
@@ -171,9 +166,9 @@ $log->do_append_log(0);
 $log->start_logging;
 
 #$log->do_flush_log(1);
-$log->log_mask($self->M_SEVERITY);
+$log->log_level($self->M_WARNING);
 
-$log->add_tag('.BB');
+$log->add_tag('  M');
 
 #-------------------------------------------------------------------------------
 # Setup command description and check help option.
@@ -210,7 +205,7 @@ $log->show_on_warning(1) if $cmd->get_option('verbose') > 2;
 #
 my $cfm = $app->get_app_object('ConfigManager');
 $cfm->select_config_object('defaultConfigObject');
-$cfm->requestFile('buildBuilder');
+$cfm->request_file('buildBuilder');
 $cfm->load;
 if( $cfm->nbr_documents == 0 )
 {
@@ -257,12 +252,10 @@ sub loadProjectConfig
     $cfm->load;
     if( $log->get_last_error == $cfm->C_CIO_DESERIALFAIL )
     {
-      my $f = $cfm->configFile;
+      my $f = $cfm->config_file;
       $f =~ s@.*?([^/]+)$@$1@;
 
-      $self->sayit( "Problems reading project file $f, abort ..."
-                  , $self->C_PROJECTREADERR
-                  );
+      $self->log( $self->C_PROJECTREADERR, [$f]);
     }
 
     else
@@ -284,9 +277,7 @@ sub createNewDistro
   #
   if( $distro_name !~ m/^[\w_:]+$/ )
   {
-    $self->sayit( "Illegal ditribution name '$distro_name'"
-                , $self->C_ILLDISTRONAME
-                );
+    $self->log( $self->C_ILLDISTRONAME, [$distro_name]);
     return;
   }
 
@@ -294,7 +285,7 @@ sub createNewDistro
   #
   if( -r buildbuilder_markfile )
   {
-    $self->sayit( 'Build builder markfile found.', $self->C_MARKFILEFOUND);
+    $self->log($self->C_MARKFILEFOUND);
     $self->leave;
   }
 
@@ -328,14 +319,12 @@ sub createNewDistro
 
   if( -d $distro_dir )
   {
-    $self->sayit( "Directory for distribution $distro_name exists"
-                , $self->C_DISTRODIREXISTS
-                );
+    $self->log( $self->C_DISTRODIREXISTS, [$distro_name]);
   }
 
   else
   {
-    $self->sayit( "\nCreating distribution $distro_name", $self->C_INFO);
+    $self->write_log( $self->C_LOG_TRACE, "Creating distribution $distro_name");
 
     # Create directories
     #
@@ -348,14 +337,14 @@ sub createNewDistro
                          , {mode => oct(755)}
                          );
 
-    $self->sayit( "Directories created", $self->C_DIRSCREATED);
+    $self->log($self->C_DIRSCREATED);
 
     # Create Project.yml
     #
     $cfm->add_config_object( 'Project'
                            , { store_type       => 'Yaml'
                              , location         => $cfm->C_CFF_FILEPATH
-                             , requestFile      => "$distro_dir/Project"
+                             , request_file      => "$distro_dir/Project"
                              }
                            );
 
@@ -456,6 +445,20 @@ sub createNewDistro
                      ]
                    );
     $cfm->set_value( 'Cpan/Account', '');
+    $cfm->set_value( 'Cpan/Manifest-skip-list'
+                   , [ '^\..*', "\\b$distro_dir" . '-[\d\.\_]+'
+                     , qw( ^MYMETA\. \bBuild$ \bBuild.bat$ ~$ \.bak$
+                           ^MANIFEST\.SKIP
+                           \bblib \b_build
+                           \bBuild.COM$ \bBUILD.COM$ \bbuild.com$
+                           \bDistribution-Tests/\.* \bProject.yml$
+                           \bOld/.* \bTests/.* .*\.tgz$ .*\.tb2$
+                           .*\.tar$ .*\.tar\.gz$ .*\.tar\.b2$ \bpm_to_blib$
+                           ^script/example_program.pl$
+                         )
+                     ]
+                   );
+
     $cfm->set_value( 'Git/github/account', '');
     $cfm->set_value( 'Git/github/repository', '');
     $cfm->set_value( 'Git/git-ignore-list'
@@ -466,19 +469,6 @@ sub createNewDistro
                            Distribution-Tests/* Old/* Tests/* *.tgz *.tb2
                            *.tar *.tar.gz *.tar.b2 pm_to_blib
                            script/example_program.pl
-                         )
-                     ]
-                   );
-    $cfm->set_value( 'Manifest-skip-list'
-                   , [ '^\..*', "\\b$distro_dir" . '-[\d\.\_]+'
-                     , qw( ^MYMETA\. \bBuild$ \bBuild.bat$ ~$ \.bak$
-                           ^MANIFEST\.SKIP
-                           \bblib \b_build
-                           \bBuild.COM$ \bBUILD.COM$ \bbuild.com$
-                           \bDistribution-Tests/\.* \bProject.yml$
-                           \bOld/.* \bTests/.* .*\.tgz$ .*\.tb2$
-                           .*\.tar$ .*\.tar\.gz$ .*\.tar\.b2$ \bpm_to_blib$
-                           ^script/example_program.pl$
                          )
                      ]
                    );
@@ -501,23 +491,24 @@ EOTXT
     my \$obj = $distro_name->new();
 EOTXT
                    );
+    my $test_label = '100-test';
     $cfm->set_value( 'Tests'
                    , [ { module => $distro_name
-                       , 'test-programs' => [ 't/100-test.t' ]
+                       , 'test-programs' => [ "t/$test_label.t" ]
                        }
                      ]
                    );
     $cfm->set_value( 'Todo', { $date->ymd => 'Think of what to build'});
 
     $cfm->save;
-    $self->sayit( 'Project.yml generated', $self->C_INFO);
+    $self->write_log( $self->C_LOG_TRACE, 'Project.yml generated');
 
 
     $self->mark_distribution($distro_dir);
 
     $self->generate_module( $cfm, $distro_name, $module_path);
     $self->generate_program( $cfm, $distro_name, $distro_dir);
-    $self->generate_test_program( $cfm, $distro_name, $distro_dir);
+    $self->generate_test_program( $cfm, $distro_name, $distro_dir, $test_label);
 
     $self->find_dependencies( $distro_name, $distro_dir);
 #    $self->find_config_dependencies( $distro_name, $distro_dir);
@@ -555,9 +546,7 @@ sub updateDistro
   #
   if( ! -r buildbuilder_markfile )
   {
-    $self->sayit( 'Build builder markfile not found.'
-                , $self->C_MARKFILENOTFOUND
-                );
+    $self->log($self->C_MARKFILENOTFOUND);
     $self->leave;
   }
 
@@ -571,7 +560,7 @@ sub updateDistro
   $cfm->add_config_object( 'Project'
                          , { store_type       => 'Yaml'
                            , location         => $cfm->C_CFF_FILEPATH
-                           , requestFile      => 'Project'
+                           , request_file      => 'Project'
                            }
                          );
 
@@ -580,7 +569,7 @@ sub updateDistro
   $cfm->select_document(0);
 
   my $distro_name = $cfm->get_value('Application/name');
-  $self->sayit( "\nUpdate $distro_name distribution", $self->C_INFO);
+  $self->write_log( $self->C_LOG_TRACE, "Update $distro_name distribution");
 
   my $distro_path = $distro_name;
   $distro_path =~ s/::/\//g;
@@ -610,22 +599,6 @@ sub updateDistro
      if $cfm->get_value('Application/use_git');
   $self->generate_perlcriticrc($distro_dir)
      if $cfm->get_value('Application/use_scrutinize');
-
-  return;
-}
-
-#-------------------------------------------------------------------------------
-#
-sub sayit
-{
-  my( $self, $message, $code) = @_;
-
-  my $app = AppState->instance;
-  my $cmd = $app->get_app_object('CommandLine');
-  my $log = $app->get_app_object('Log');
-
-  $self->wlog( $message, $code);
-  say $message if $cmd->get_option('verbose');
 
   return;
 }
@@ -675,28 +648,46 @@ use Moose;
 extends qw(AppState::Ext::Constants);
 
 use AppState;
+use AppState::Ext::Meta_Constants;
 
-#...
+#-----------------------------------------------------------------------------
+# Status definitions
+#
+#def_sts( 'C_SOMECONST0', 'M_F_INFO', 'show constant 0 always');
+#def_sts( 'C_SOMECONST1', 'M_ERROR', 'Err def_sts 1');
+#def_sts( 'C_SOMECONST2', 'M_FATAL', 'Error try %d/0');
 
-sub BUILD
-{
-  my(\$self) = \@_;
+#-----------------------------------------------------------------------------
+# Attribute definitions
+#
+#has attr1 => ();
 
-  if( \$self->meta->is_mutable )
-  {
-    \$self->code_reset;
-#    \$self->const( 'C_SOMECONST0', qw( M_F_INFO M_SUCCESS));
-#    \$self->const( 'C_SOMECONST1', qw( M_F_ERROR M_FAIL));
-#    \$self->const( 'C_SOMECONST2', qw( M_WARNING M_FORCED));
+#-----------------------------------------------------------------------------
+# Builder if needed
+#
+#sub BUILD
+#{
+#  my(\$self) = \@_;
+#
+#}
 
-    __PACKAGE__->meta->make_immutable;
-  }
-}
+#-----------------------------------------------------------------------------
+# Destructor if needed
+#
+#sub DEMOLISH
+#{
+#  my(\$self) = \@_;
+#
+#}
 
-#...
+#-----------------------------------------------------------------------------
+# Methods
+#
 
+#-----------------------------------------------------------------------------
 # End of package
 #
+__PACKAGE__->meta->make_immutable;
 1;
 
 EOCODE
@@ -771,7 +762,7 @@ EOCODE
   print $F "\n";
 
   close $F;
-  $self->sayit( "$module_path generated", $self->C_INFO);
+  $self->write_log( $self->C_LOG_TRACE, "$module_path generated");
 
   return;
 }
@@ -823,43 +814,53 @@ use Moose;
 extends qw(AppState::Ext::Constants);
 
 use AppState;
+use AppState::Ext::Meta_Constants;
 
-#...
+#-----------------------------------------------------------------------------
+# Status definitions
+#
+#def_sts( 'C_SOMECONST0', 'M_F_INFO', 'show constant 0 always');
+#def_sts( 'C_SOMECONST1', 'M_ERROR', 'Err def_sts 1');
+#def_sts( 'C_SOMECONST2', 'M_FATAL', 'Error try %d/0');
 
-sub BUILD
-{
-  my(\$self) = \@_;
+#-----------------------------------------------------------------------------
+# Attribute definitions
+#
+#has attr1 => ();
 
-  if( \$self->meta->is_mutable )
-  {
-    \$self->code_reset;
-#    \$self->const( 'C_SOMECONST0', qw( M_F_INFO M_SUCCESS));
-#    \$self->const( 'C_SOMECONST1', qw( M_F_ERROR M_FAIL));
-#    \$self->const( 'C_SOMECONST2', qw( M_WARNING M_FORCED));
+#-----------------------------------------------------------------------------
+# Builder if needed
+#
+#sub BUILD
+#{
+#  my(\$self) = \@_;
+#
+#}
 
-    __PACKAGE__->meta->make_immutable;
-  }
-}
+__PACKAGE__->meta->make_immutable;
 
+#-----------------------------------------------------------------------------
 # Make object from the main class
 #
 my \$self = main->new();
 
 #...
 
+#-----------------------------------------------------------------------------
 # End of program
 #
 \$self->leave;
 
-# Destructor
+#-----------------------------------------------------------------------------
+# Destructor if needed
 #
-sub DEMOLISH
-{
-  my(\$self) = \@_;
+#sub DEMOLISH
+#{
+#  my(\$self) = \@_;
+#
+#}
 
-  #...
-}
-
+#-----------------------------------------------------------------------------
 # Subroutines
 #
 #...
@@ -879,26 +880,29 @@ use Moose;
 
 __PACKAGE__->meta->make_immutable;
 
+#-----------------------------------------------------------------------------
 # Make object from the main class
 #
 my \$self = main->new();
 
 #...
 
+#-----------------------------------------------------------------------------
 # End of program
 #
 \$self->DESTROY;
 exit(0);
 
-# Destructor
+#-----------------------------------------------------------------------------
+# Destructor if needed
 #
-sub DEMOLISH
-{
-  my(\$self) = \@_;
+#sub DEMOLISH
+#{
+#  my(\$self) = \@_;
+#
+#}
 
-  #...
-}
-
+#-----------------------------------------------------------------------------
 # Subroutines
 #
 #...
@@ -914,17 +918,20 @@ EOCODE
     print $F <<EOCODE;
 #...
 
+#-----------------------------------------------------------------------------
 # Make object from the main class
 #
 my \$self = main->new();
 
 #...
 
+#-----------------------------------------------------------------------------
 # End of program
 #
 \$self->DESTROY;
 exit(0);
 
+#-----------------------------------------------------------------------------
 # Constructor
 #
 sub new
@@ -938,15 +945,16 @@ sub new
   return bless \$self, \$class;
 }
 
-# Destructor
+#-----------------------------------------------------------------------------
+# Destructor if needed
 #
-sub DESTROY
-{
-  my(\$self) = \@_;
+#sub DESTROY
+#{
+#  my(\$self) = \@_;
+#
+#}
 
-  #...
-}
-
+#-----------------------------------------------------------------------------
 # Subroutines
 #
 #...
@@ -960,7 +968,7 @@ EOCODE
   print $F "\n";
 
   close $F;
-  $self->sayit( "$distro_dir/script/program.pl generated", $self->C_INFO);
+  $self->write_log( $self->C_LOG_TRACE, "$distro_dir/script/program.pl generated");
 
   return;
 }
@@ -970,7 +978,7 @@ EOCODE
 #
 sub generate_test_program
 {
-  my( $self, $cfm, $distro_name, $distro_dir) = @_;
+  my( $self, $cfm, $distro_name, $distro_dir, $test_label) = @_;
 
   my $app = AppState->instance;
   my $cmd = $app->get_app_object('CommandLine');
@@ -983,7 +991,7 @@ sub generate_test_program
   #-----------------------------------------------------------------------------
   # Open the module file
   #
-  open my $F, '>', "$distro_dir/t/100-test.t";
+  open my $F, '>', "$distro_dir/t/$test_label.t";
 
   #-----------------------------------------------------------------------------
   # Write
@@ -1007,23 +1015,19 @@ require File::Path;
 #-------------------------------------------------------------------------------
 # Init
 #
+my \$test_label = '$test_label';
 my \$app = AppState->instance;
-\$app->use_work_dir(0);
-\$app->use_temp_dir(0);
-\$app->initialize( config_dir => 't/100-Test');
+\$app->initialize( config_dir => "t/\$test_label"
+                , use_work_dir => 0
+                , use_temp_dir => 0
+                );
 \$app->check_directories;
 
-
 my \$log = \$app->get_app_object('Log');
-#\$log->show_on_error(0);
 \$log->show_on_warning(1);
 \$log->do_append_log(0);
-
 \$log->start_logging;
-
-\$log->do_flush_log(1);
-\$log->log_mask(\$log->M_SEVERITY);
-
+\$log->log_level(\$log->M_TRACE);
 \$log->add_tag('100');
 
 #-------------------------------------------------------------------------------
@@ -1039,7 +1043,7 @@ BEGIN { use_ok('$distro_name') };
 done_testing();
 \$app->cleanup;
 
-File::Path::remove_tree( 't/100-Test', {verbose => 1});
+#File::Path::remove_tree("t/\$test_label");
 
 EOCODE
 
@@ -1069,7 +1073,7 @@ EOCODE
   print $F "\n";
 
   close $F;
-  $self->sayit( "$distro_dir/t/100-test.t generated", $self->C_INFO);
+  $self->write_log( $self->C_LOG_TRACE, "$distro_dir/t/$test_label.t generated");
 
   return;
 }
@@ -1248,7 +1252,7 @@ EOCODE
     my $error = $@;
     if( $error )
     {
-      $self->sayit( "Error evaluating code: $error", $self->C_EVALERROR);
+      $self->log( $self->C_EVALERROR, [$error]);
       $self->leave;
     }
 
@@ -1263,7 +1267,7 @@ EOCODE
   say $F "\n";
 
   close $F;
-  $self->sayit( 'README generated', $self->C_INFO);
+  $self->write_log( $self->C_LOG_TRACE, 'README generated');
 
 
 
@@ -1288,14 +1292,14 @@ EOCODE
     my $error = $@;
     if( $error )
     {
-      $self->sayit( "Error evaluating code: $error", $self->C_EVALERROR);
+      $self->log( $self->C_EVALERROR, [$error]);
       $self->leave;
     }
 
     say $F $license_obj->fulltext;
 
     close $F;
-    $self->sayit( "LICENSE_$license generated", $self->C_INFO);
+    $self->write_log( $self->C_LOG_TRACE, "LICENSE_$license generated");
   }
 
   return;
@@ -1341,7 +1345,7 @@ sub generate_changes
   say $F "\n";
 
   close $F;
-  $self->sayit( 'Changes generated', $self->C_INFO);
+  $self->write_log( $self->C_LOG_TRACE, 'Changes generated');
 
   return;
 }
@@ -1447,7 +1451,7 @@ EOCODE
   say $F "\n";
 
   close $F;
-  $self->sayit( 'Build.PL generated', $self->C_INFO);
+  $self->write_log( $self->C_LOG_TRACE, 'Build.PL generated');
 
   return;
 }
@@ -1466,7 +1470,7 @@ sub generate_manifest_skip_list
   #
   open my $F, '>', "$distro_dir/MANIFEST.SKIP";
 
-  my $skip_list = $cfm->get_value('Manifest-skip-list');
+  my $skip_list = $cfm->get_value('/Cpan/Manifest-skip-list');
   foreach my $skip (sort @$skip_list)
   {
     say $F $skip;
@@ -1475,7 +1479,7 @@ sub generate_manifest_skip_list
   #-----------------------------------------------------------------------------
   #
   close $F;
-  $self->sayit( 'MANIFEST.SKIP generated', $self->C_INFO);
+  $self->write_log( $self->C_LOG_TRACE, 'MANIFEST.SKIP generated');
 
   return;
 }
@@ -1510,9 +1514,9 @@ sub generate_run_buildpl
   }
 
   close $MBRC;
-  $self->sayit( '.modulebuildrc written', $self->C_INFO);
+  $self->write_log( $self->C_LOG_TRACE, '.modulebuildrc written');
   $ENV{'MODULEBUILDRC'} = '.modulebuildrc';
-  $self->sayit( '$ENV{MODULEBUILDRC} set', $self->C_INFO);
+  $self->write_log( $self->C_LOG_TRACE, '$ENV{MODULEBUILDRC} set');
 
 
   # Fake a manifest file after which it will be generated when Build exists
@@ -1522,22 +1526,22 @@ sub generate_run_buildpl
   # Generate the Build program
   #
   system('/usr/bin/env perl Build.PL');
-  $self->sayit( 'Build.PL executed', $self->C_INFO);
+  $self->write_log( $self->C_LOG_TRACE, 'Build.PL executed');
 
   # Generate the real MANIFEST
   #
   system('./Build manifest');
-  $self->sayit( 'Build manifest executed', $self->C_INFO);
+  $self->write_log( $self->C_LOG_TRACE, 'Build manifest executed');
 
   # Make the distribution
   #
   system('./Build');
-  $self->sayit( 'Build executed', $self->C_INFO);
+  $self->write_log( $self->C_LOG_TRACE, 'Build executed');
 
   # Test the distribution
   #
   system('./Build test');
-  $self->sayit( 'Build test executed', $self->C_INFO);
+  $self->write_log( $self->C_LOG_TRACE, 'Build test executed');
 
   chdir('..') unless $distro_dir eq '.';
   return;
@@ -1583,7 +1587,7 @@ sub generate_perlcriticrc
   }
 
   close $PCRC;
-  $self->sayit( '.perlcriticrc generated', $self->C_INFO);
+  $self->write_log( $self->C_LOG_TRACE, '.perlcriticrc generated');
 
   return;
 }

@@ -21,3 +21,6 @@ Tests/*
 *.tar.b2
 pm_to_blib
 script/example_program.pl
+DTC-EditProject
+DTC-Genpath
+DTC-Project

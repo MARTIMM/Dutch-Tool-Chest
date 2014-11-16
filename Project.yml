@@ -132,15 +132,15 @@ Readme:
 #
 Todo:
  - Scrutinize:
-    Testing of programs
-    Create manpage
+    - Testing of programs
+    - Create manpage
  - BuildBuilder create and modify a distribution environment:
-    options:
-     -V=i: generate modules and programs using minimal perl version
-     -M: generate module using Moose
-     -A: generate module using AppState
-     -v: verbose, errors, warnings
-     -h: help
-    Create manpage
+    - options:
+       -V=i: generate modules and programs using minimal perl version
+       -M: generate module using Moose
+       -A: generate module using AppState
+       -v: verbose, errors, warnings
+       -h: help
+    - Create manpage
  - Program to create and modify a Project.yml file
 

@@ -128,7 +128,7 @@ sub substitute
   {
     say "$dir/$file modified";
 
-    open $F, '>', $file;
+    open $F, '>', $file or die $!;
     print $F $text;
     close $F;
   }
