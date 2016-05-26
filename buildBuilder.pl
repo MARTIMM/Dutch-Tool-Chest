@@ -158,16 +158,8 @@ $app->check_directories;
 # Setup logging
 #
 my $log = $app->get_app_object('Log');
-
-$log->show_on_error(0);
-$log->show_on_warning(0);
-$log->do_append_log(0);
-
-$log->start_logging;
-
-#$log->do_flush_log(1);
+$log->start_file_logging;
 $log->log_level($self->M_WARNING);
-
 $log->add_tag('  M');
 
 #-------------------------------------------------------------------------------
@@ -1017,17 +1009,10 @@ require File::Path;
 #
 my \$test_label = '$test_label';
 my \$app = AppState->instance;
-\$app->initialize( config_dir => "t/\$test_label"
-                , use_work_dir => 0
-                , use_temp_dir => 0
-                );
-\$app->check_directories;
+\$app->initialize( config_dir => "t/\$test_label", check_directories => 1);
 
 my \$log = \$app->get_app_object('Log');
-\$log->show_on_warning(1);
-\$log->do_append_log(0);
-\$log->start_logging;
-\$log->log_level(\$log->M_TRACE);
+\$log->start_file_logging({mode => 'append'});
 \$log->add_tag('100');
 
 #-------------------------------------------------------------------------------
